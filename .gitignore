@@ -1,0 +1,40 @@
+# Keil MDK / µVision
+*.uvguix.*
+*.uvoptx
+*.uvgui.*
+*.scvd
+*.crf
+*.d
+*.o
+*.dep
+*.lnp
+*.axf
+*.htm
+*.map
+*.iex
+*.lst
+*.obj
+*.hex
+*.bin
+*.elf
+*.out
+JLinkLog.txt
+JLinkSettings.ini
+
+# Build outputs
+RTE/
+Listings/
+Objects/
+Debug/
+Release/
+build/
+out/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
