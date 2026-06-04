@@ -52,7 +52,7 @@
           <OutputName>GD32A712AEVB</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>0</CreateHexFile>
+          <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath>.\Listings\</ListingPath>
@@ -340,7 +340,7 @@
               <MiscControls>-Wassign-enum</MiscControls>
               <Define>GD32A711X_A712X,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User</IncludePath>
+              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User;.\DW3000</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -453,6 +453,61 @@
               <FileName>gd32a712_evb.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Hardware\gd32a712_evb.h</FilePath>
+            </File>
+            <File>
+              <FileName>oled.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\oled.c</FilePath>
+            </File>
+            <File>
+              <FileName>oled.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\oled.h</FilePath>
+            </File>
+            <File>
+              <FileName>OLED_Font.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\OLED_Font.h</FilePath>
+            </File>
+            <File>
+              <FileName>uart.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\uart.h</FilePath>
+            </File>
+            <File>
+              <FileName>uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>can.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\can.c</FilePath>
+            </File>
+            <File>
+              <FileName>can.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\can.h</FilePath>
+            </File>
+            <File>
+              <FileName>uwb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\uwb.c</FilePath>
+            </File>
+            <File>
+              <FileName>uwb.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\uwb.h</FilePath>
+            </File>
+            <File>
+              <FileName>uwb_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\uwb_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>uwb_port.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\uwb_port.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -903,6 +958,16 @@
               <FileName>gd32a7xx_err_report.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Library\gd32a7xx_err_report.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>DW3000</GroupName>
+          <Files>
+            <File>
+              <FileName>deca_device.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\DW3000\deca_device.c</FilePath>
             </File>
           </Files>
         </Group>

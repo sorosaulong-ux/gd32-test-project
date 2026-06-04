@@ -1,87 +1,69 @@
 /*!
-    \file    main.c
-    \brief   running LED
-
-    \version 2025-08-26, V0.1.0, demo for GD32A7xx
-*/
-
-/*
-    Copyright (c) 2025, GigaDevice Semiconductor Inc.
-
-    Redistribution and use in source and binary forms, with or without modification, 
-are permitted provided that the following conditions are met:
-
-    1. Redistributions of source code must retain the above copyright notice, this
-       list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice,
-       this list of conditions and the following disclaimer in the documentation
-       and/or other materials provided with the distribution.
-    3. Neither the name of the copyright holder nor the names of its contributors
-       may be used to endorse or promote products derived from this software without
-       specific prior written permission.
-
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
-OF SUCH DAMAGE.
-*/
+ *  \file    main.c
+ *  \brief   DW3000 UWB test — initialise dual modules, run ranging
+ *
+ *  SPI:  PE6(SCK) PE5(MISO) PH14(MOSI)   [software bit‑bang]
+ *  UWB1: PL2(CS) PI8(IRQ) PL0(RST)
+ *  UWB2: PB11(CS) PI10(IRQ) PI11(RST)
+ *  WAKEUP: PB10
+ */
 
 #include "gd32a7xx.h"
 #include "gd32a712_evb.h"
 #include "systick.h"
+#include "uart.h"
+#include "uwb.h"
+#include <stdio.h>
 
-void cache_enable(void);
+static void cache_enable(void);
 
-/*!
-    \brief      main function
-    \param[in]  none
-    \param[out] none
-    \retval     none
-*/
 int main(void)
 {
     cache_enable();
-    /* configure systick */
     systick_config();
 
-    /* initialize the LEDs */
-    gd_eval_led_init(LED1);
-    gd_eval_led_init(LED2);
-    gd_eval_led_init(LED3);
-    gd_eval_led_init(LED4);
+    /* LEDs */
+    gd_eval_led_init(LED1); gd_eval_led_off(LED1);
+    gd_eval_led_init(LED2); gd_eval_led_off(LED2);
+    gd_eval_led_init(LED3); gd_eval_led_off(LED3);
+    gd_eval_led_init(LED4); gd_eval_led_off(LED4);
 
-    while(1) {
-        /* toggle LED1 */
-        gd_eval_led_toggle(LED1);
-        delay_1ms(250);
-        /* toggle LED2 */
-        gd_eval_led_toggle(LED2);
-        delay_1ms(250);
-        /* toggle LED3 */
-        gd_eval_led_toggle(LED3);
-        delay_1ms(250);
-        /* toggle LED4 */
-        gd_eval_led_toggle(LED4);
-        delay_1ms(250);
+    /* UART */
+    uart_init();
+    printf("\r\n=== DW3000 UWB Test ===\r\n");
+    printf(" Initialising both UWB modules...\r\n\r\n");
+
+    /* UWB init */
+    if (uwb_init() != UWB_OK) {
+        printf("[FAIL] No DW3000 devices found!\r\n");
+        printf(" Check wiring: SPI pins, CS, RST, power (3.3V).\r\n");
+        while (1) { gd_eval_led_toggle(LED1); delay_1ms(200); }
+    }
+
+    printf("[OK] Both modules ready.\r\n");
+    printf(" Running ranging every 2 seconds...\r\n\r\n");
+
+    while (1) {
+        double dist;
+        int    ret = uwb_ranging(&dist);
+
+        if (ret == UWB_OK) {
+            printf("[RNG] Distance = %.3f m\r\n", dist);
+            gd_eval_led_toggle(LED2);
+        } else if (ret == UWB_ERR_TIMEOUT) {
+            printf("[RNG] Timeout — check antenna alignment\r\n");
+            gd_eval_led_toggle(LED3);
+        } else {
+            printf("[RNG] Error code %d\r\n", ret);
+            gd_eval_led_toggle(LED4);
+        }
+
+        delay_1ms(2000);
     }
 }
 
-/*!
-    \brief      enable the CPU cache
-    \param[in]  none
-    \param[out] none
-    \retval     none
-*/
-void cache_enable(void)
+static void cache_enable(void)
 {
-    /* enable i-cache */
     SCB_EnableICache();
-    /* enable d-cache */
     SCB_EnableDCache();
 }
