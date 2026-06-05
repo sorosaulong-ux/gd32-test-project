@@ -97,6 +97,10 @@ unsigned long portGetTickCnt(void);
 decaIrqStatus_t decamutexon(void);
 void decamutexoff(decaIrqStatus_t s);
 
+/* ms tick counter (fed from SysTick_Handler in gd32a7xx_it.c) */
+void uwb_tick_inc(void);
+uint32_t uwb_tick_get(void);
+
 /* ====================================================================
  *  Convenience macros (compatible with original port.h)
  * ====================================================================*/

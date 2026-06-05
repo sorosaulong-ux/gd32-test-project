@@ -237,7 +237,6 @@ void EXTI10_15_IRQHandler(void)
  * ====================================================================*/
 void Sleep(uint32_t x)       { delay_1ms(x); }
 void deca_sleep(unsigned int ms)  { delay_1ms(ms); }
-unsigned long portGetTickCnt(void) { return 0; }
 
 void delay_1us(uint32_t count)
 {
@@ -257,3 +256,9 @@ void __aeabi_assert(const char *expr, const char *file, int line)
     (void)expr; (void)file; (void)line;
     while (1);
 }
+
+/* ---- ms tick counter ---- */
+static volatile uint32_t s_tick_ms = 0;
+void uwb_tick_inc(void)  { s_tick_ms++; }
+uint32_t uwb_tick_get(void) { return s_tick_ms; }
+unsigned long portGetTickCnt(void) { return s_tick_ms; }

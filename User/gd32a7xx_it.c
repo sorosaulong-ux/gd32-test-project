@@ -34,6 +34,7 @@ OF SUCH DAMAGE.
 
 #include "gd32a7xx_it.h"
 #include "systick.h"
+#include "uwb_port.h"
 
 /*!
     \brief      this function handles NMI exception
@@ -148,4 +149,5 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
     delay_decrement();
+    uwb_tick_inc();
 }
