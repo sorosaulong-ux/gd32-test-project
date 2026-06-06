@@ -1,9 +1,10 @@
 /*!
  *  \file    main.c
- *  \brief   UWB Radar CIR — CH5 PLEN=128, change LABEL below per scene
+ *  \brief   GD32A7 — DS-TWR Responder (ex_05b official pattern)
  *
- *  Edit LABEL, recompile, record 100+ frames.
- *  Then run: python cir_diff.py empty.csv book.csv
+ *  Uses single DW3000 (UWB2) as DS-TWR Responder.
+ *  STM32F103 runs DS-TWR Initiator.
+ *  Distance computed and displayed on GD32A7 serial.
  */
 
 #include "gd32a7xx.h"
@@ -11,21 +12,15 @@
 #include "systick.h"
 #include "uart.h"
 #include "uwb.h"
-#include "uwb_port.h"
 #include <stdio.h>
-
-/* ─────── CHANGE THIS PER SCENE ─────── */
-#define LABEL  "human"
-/* ───────────────────────────────────── */
 
 static void cache_enable(void);
 
 int main(void)
 {
     int      ret;
-    uint32_t seq    = 0;
-    uint32_t t_next;
-    uwb_radar_result_t res;
+    uint32_t cnt = 0;
+    double   dist;
 
     cache_enable();
     systick_config();
@@ -35,37 +30,30 @@ int main(void)
     gd_eval_led_init(LED3); gd_eval_led_off(LED3);
 
     uart_init();
-    printf("\r\n============================================\r\n");
-    printf(" UWB Radar CIR  CH5 PLEN=128\r\n");
-    printf(" Label: %s\r\n", LABEL);
-    printf("============================================\r\n\r\n");
+    printf("\r\n=== GD32A7 DS-TWR Responder ===\r\n\r\n");
 
-    ret = uwb_radar_init();
+    ret = uwb_ds_responder_init();
     if (ret != UWB_OK) {
-        printf("[FATAL] init failed code=%d\r\n", ret);
+        printf("[FAIL] uwb_ds_responder_init error %d\r\n", ret);
         while (1) { gd_eval_led_toggle(LED1); delay_1ms(200); }
     }
-    printf("[INIT] OK.\r\n\r\n");
 
-    uwb_radar_csv(NULL);
-    t_next = uwb_tick_get();
+    printf("Waiting for STM32 Initiator...\r\n\r\n");
 
     while (1) {
-        while (uwb_tick_get() < t_next) { /* spin */ }
-        t_next += UWB_RADAR_TX_INTERVAL_MS;
+        cnt++;
+        ret = uwb_ds_responder_poll(&dist);
 
-        ret = uwb_radar_scan(&res, seq, LABEL);
-        seq++;
+        if (ret == 1) {
+            gd_eval_led_toggle(LED2);
+            printf("[%lu] dist=%.3f m\r\n", (unsigned long)cnt, dist);
+        }
 
-        if (ret == UWB_OK) gd_eval_led_toggle(LED2);
-        else               gd_eval_led_toggle(LED3);
-
-        uwb_radar_csv(&res);
+        delay_1ms(50);
     }
 }
 
-static void cache_enable(void)
-{
+static void cache_enable(void) {
     SCB_EnableICache();
     SCB_EnableDCache();
 }
