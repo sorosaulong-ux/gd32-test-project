@@ -15,8 +15,8 @@
 /* ====================================================================
  *  ★ 编译开关 — 改这里切换模式 ★
  * ====================================================================*/
-#define MODE_RANGING         /* 测距 */
-//#define MODE_RADAR_RX      /* 雷达接收 */
+//#define MODE_RANGING         /* 测距 */
+#define MODE_RADAR_RX      /* 雷达接收 */
 
 static void cache_enable(void);
 
@@ -81,9 +81,8 @@ static void mode_radar_rx(void)
             uwb_radar_csv(&res);
             seq++;
         } else {
-            /* Timeout — just print a dot so user knows we're alive */
-            printf(".");
-            fflush(stdout);  /* flush for real-time feedback */
+            /* Timeout — print dot on its own line */
+            printf(".\r\n");
         }
     }
 }
