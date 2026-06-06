@@ -275,3 +275,141 @@ int uwb_ds_responder_poll(double *dist)
 
     return 1;
 }
+
+/* ====================================================================
+ *  Radar RX — bistatic 车内生命检测 (接收 STM32 的雷达脉冲)
+ *
+ *  STM32 = TX (连续发脉冲 @ 4Hz)
+ *  GD32A7 = RX (收脉冲 → 提取 CIR I/Q → FFT 呼吸检测)
+ *
+ *  CIR 配置: 128 bins, raw I/Q (24-bit sign-extended)
+ *  CSV 输出供 Python 分析 (cir_phase.py, cir_breath.py)
+ * ====================================================================*/
+
+/* ─── Radar channel config (RX only) ─── */
+#define RADAR_TIMEOUT_MS    600  /* wait up to 600ms per frame */
+
+static int32_t radar_s24(const uint8_t *p) {
+    int32_t v = ((int32_t)p[0] << 16) | ((int32_t)p[1] << 8) | p[2];
+    if (v & 0x800000) v |= (int32_t)0xFF000000U;
+    return v;
+}
+
+int uwb_radar_rx_init(void)
+{
+    uint32_t id;
+
+    UWB_SPI_Init();
+    Active_UWB = 2;
+
+    port_set_dw_ic_spi_fastrate();
+    reset_DWIC();
+    Sleep(2);
+
+    while (!dwt_checkidlerc());
+
+    if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
+        printf("[RADAR-RX] dwt_initialise FAILED\r\n");
+        return UWB_ERR_NO_DEVICE;
+    }
+    if (dwt_configure(&uwb_config)) {
+        printf("[RADAR-RX] dwt_configure FAILED\r\n");
+        return UWB_ERR_NO_DEVICE;
+    }
+
+    /* TX power config (needed even if RX-only — PLL uses it) */
+    {
+        dwt_txconfig_t tp = { 0x34, 0xfdfdfdfd, 0x0 };
+        dwt_configuretxrf(&tp);
+    }
+
+    dwt_setrxantennadelay(RX_ANT_DLY);
+    dwt_settxantennadelay(TX_ANT_DLY);
+    dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
+
+    /* ★ Enable CIR accumulator on RX path */
+    dwt_configciadiag(1);
+
+    id = dwt_readdevid();
+    printf("[RADAR-RX] Receiver ready, id=0x%08lX\r\n", (unsigned long)id);
+    return UWB_OK;
+}
+
+int uwb_radar_rx_scan(uwb_radar_result_t *res, uint32_t seq, const char *label)
+{
+    uint32_t status, t0;
+    uint8_t  acc_buf[256 * 6 + 1];
+    dwt_rxdiag_t diag;
+
+    memset(res, 0, sizeof(*res));
+    res->seq = seq;
+    if (label) strncpy(res->label, label, UWB_LABEL_LEN - 1);
+
+    /* Open RX — wait for radar pulse from STM32 */
+    dwt_write32bitreg(SYS_STATUS_ID,
+        SYS_STATUS_ALL_RX_GOOD | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO);
+    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+
+    t0 = uwb_tick_get();
+    while (1) {
+        status = dwt_read32bitreg(SYS_STATUS_ID);
+        if (status & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO))
+            break;
+        if (uwb_tick_get() - t0 > RADAR_TIMEOUT_MS)
+            break;
+    }
+
+    if (!(status & SYS_STATUS_RXFCG_BIT_MASK)) {
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO);
+        return UWB_ERR_TIMEOUT;
+    }
+
+    res->timestamp_ms = uwb_tick_get();
+
+    /* Read diagnostics */
+    dwt_readdiagnostics(&diag);
+    res->fp_index = diag.ipatovFpIndex >> 6;
+    res->rx_power = diag.ipatovPower;
+
+    /* Read CIR accumulator */
+    {
+        uint16_t fp = res->fp_index;
+        int32_t start = (int32_t)fp - 40;
+        if (start < 0) start = 0;
+
+        memset(acc_buf, 0, sizeof(acc_buf));
+        dwt_readaccdata(acc_buf, sizeof(acc_buf), (uint16_t)start);
+
+        uint32_t noise_sum = 0, max_mag = 0;
+        for (int j = 0; j < UWB_RADAR_CIR_BINS; j++) {
+            res->cir_i[j] = radar_s24(&acc_buf[1 + j * 6]);
+            res->cir_q[j] = radar_s24(&acc_buf[1 + j * 6 + 3]);
+            uint32_t mag = (uint32_t)(res->cir_i[j] >= 0 ? res->cir_i[j] : -res->cir_i[j])
+                         + (uint32_t)(res->cir_q[j] >= 0 ? res->cir_q[j] : -res->cir_q[j]);
+            if (mag > max_mag) max_mag = mag;
+            if (j < UWB_RADAR_NOISE_BINS) noise_sum += mag;
+        }
+        res->noise   = noise_sum / UWB_RADAR_NOISE_BINS;
+        res->fp_power = max_mag;
+    }
+
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+    return UWB_OK;
+}
+
+void uwb_radar_csv(const uwb_radar_result_t *res)
+{
+    if (res == NULL) {
+        printf("timestamp_ms,seq,fp_index,rx_power,fp_power,noise");
+        for (int j = 0; j < UWB_RADAR_CIR_BINS; j++) printf(",i%d,q%d", j, j);
+        printf(",label\r\n");
+        return;
+    }
+    printf("%lu,%lu,%u,%lu,%lu,%lu",
+        (unsigned long)res->timestamp_ms, (unsigned long)res->seq,
+        (unsigned)res->fp_index, (unsigned long)res->rx_power,
+        (unsigned long)res->fp_power, (unsigned long)res->noise);
+    for (int j = 0; j < UWB_RADAR_CIR_BINS; j++)
+        printf(",%ld,%ld", (long)res->cir_i[j], (long)res->cir_q[j]);
+    printf(",%s\r\n", res->label[0] ? res->label : "none");
+}
