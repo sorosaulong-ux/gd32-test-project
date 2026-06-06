@@ -345,18 +345,26 @@ int uwb_radar_rx_scan(uwb_radar_result_t *res, uint32_t seq, const char *label)
     res->seq = seq;
     if (label) strncpy(res->label, label, UWB_LABEL_LEN - 1);
 
-    /* Open RX — wait for radar pulse from STM32 */
-    dwt_write32bitreg(SYS_STATUS_ID,
-        SYS_STATUS_ALL_RX_GOOD | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO);
-    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+    /* Quick poll: if RX already active from previous re-arm, check for pending frame */
+    status = dwt_read32bitreg(SYS_STATUS_ID);
+    if (status & SYS_STATUS_RXFCG_BIT_MASK) {
+        /* Frame already waiting — skip to read */
+    } else {
+        /* Need to open/re-open RX */
+        dwt_setpreambledetecttimeout(0);
+        dwt_setrxtimeout(0);
+        dwt_write32bitreg(SYS_STATUS_ID,
+            SYS_STATUS_ALL_RX_GOOD | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO);
+        dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
-    t0 = uwb_tick_get();
-    while (1) {
-        status = dwt_read32bitreg(SYS_STATUS_ID);
-        if (status & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO))
-            break;
-        if (uwb_tick_get() - t0 > RADAR_TIMEOUT_MS)
-            break;
+        t0 = uwb_tick_get();
+        while (1) {
+            status = dwt_read32bitreg(SYS_STATUS_ID);
+            if (status & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO))
+                break;
+            if (uwb_tick_get() - t0 > RADAR_TIMEOUT_MS)
+                break;
+        }
     }
 
     if (!(status & SYS_STATUS_RXFCG_BIT_MASK)) {
@@ -394,21 +402,29 @@ int uwb_radar_rx_scan(uwb_radar_result_t *res, uint32_t seq, const char *label)
     }
 
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+
+    /* ★ Immediately re-arm RX — so UART CSV printing (~260ms) doesn't miss next pulse */
+    dwt_setpreambledetecttimeout(0);
+    dwt_setrxtimeout(0);
+    dwt_write32bitreg(SYS_STATUS_ID,
+        SYS_STATUS_ALL_RX_GOOD | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO);
+    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+
     return UWB_OK;
 }
 
 void uwb_radar_csv(const uwb_radar_result_t *res)
 {
     if (res == NULL) {
-        printf("timestamp_ms,seq,fp_index,rx_power,fp_power,noise");
+        printf("tms,seq,fp,prx,noise");
         for (int j = 0; j < UWB_RADAR_CIR_BINS; j++) printf(",i%d,q%d", j, j);
         printf(",label\r\n");
         return;
     }
-    printf("%lu,%lu,%u,%lu,%lu,%lu",
+    printf("%lu,%lu,%u,%lu,%lu",
         (unsigned long)res->timestamp_ms, (unsigned long)res->seq,
         (unsigned)res->fp_index, (unsigned long)res->rx_power,
-        (unsigned long)res->fp_power, (unsigned long)res->noise);
+        (unsigned long)res->noise);
     for (int j = 0; j < UWB_RADAR_CIR_BINS; j++)
         printf(",%ld,%ld", (long)res->cir_i[j], (long)res->cir_q[j]);
     printf(",%s\r\n", res->label[0] ? res->label : "none");
