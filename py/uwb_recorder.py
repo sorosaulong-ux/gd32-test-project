@@ -103,7 +103,7 @@ class CIRRecorder:
             hdr += ["label"]
             self.headers = hdr
             self.csv_writer.writerow(hdr)
-            print(f"\r[HDR] auto ({n_cir} CIR bins)")
+            print(f"\r[HDR] auto ({nb} CIR bins)")
             self.prompt = ""
         print(f"[FILE] -> {os.path.basename(fname)}")
         return self.csv_file
