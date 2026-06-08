@@ -115,10 +115,6 @@ int main(void)
     /* ── Phase 3: CAN init (500 kbps) ── */
     can_diag_init();
 
-    /* ★ WiFi 连接时 ESP8266 大电流 RF 发射可能干扰 PB13，重新拉高关蜂鸣器 */
-    GPIO_BOP(GPIOB) = GPIO_PIN_13;
-    BUZZER_Status = BUZZER_OFF;
-
     printf("[MAIN] System ready!\r\n");
     printf("  - WiFi: connected\r\n");
     printf("  - OneNET: online\r\n");
