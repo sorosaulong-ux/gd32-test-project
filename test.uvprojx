@@ -525,6 +525,11 @@
               <FilePath>.\Hardware\buzzer.c</FilePath>
             </File>
             <File>
+              <FileName>key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\key.c</FilePath>
+            </File>
+            <File>
               <FileName>esp8266.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\esp8266.c</FilePath>
