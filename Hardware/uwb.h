@@ -46,6 +46,9 @@ typedef struct {
     char      label[UWB_LABEL_LEN];
 } uwb_radar_result_t;
 
+/** 读 UWB2 ID (仅 SPI 读取, 不 reset, 不影响当前配置) */
+uint32_t uwb_check_id(void);
+
 int  uwb_radar_rx_init(void);
 int  uwb_radar_rx_scan(uwb_radar_result_t *res, uint32_t seq, const char *label);
 void uwb_radar_csv(const uwb_radar_result_t *res);  /* NULL → header */

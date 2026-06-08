@@ -277,6 +277,29 @@ int uwb_ds_responder_poll(double *dist)
 }
 
 /* ====================================================================
+ *  uwb_check_id — 读 UWB2 ID
+ *
+ *  首次调用自动配置 SPI GPIO (不影响已初始化的 UWB 状态)。
+ *  返回: 0xDECA0302/0xDECA0312 = 正常, 其他 = 异常
+ * ====================================================================*/
+uint32_t uwb_check_id(void)
+{
+    static uint8_t spi_ready;
+    uint32_t id;
+
+    if (!spi_ready) {
+        UWB_SPI_Init();          /* 仅配置 SPI 引脚和 GPIO */
+        spi_ready = 1;
+    }
+
+    Active_UWB = 2;
+    port_set_dw_ic_spi_slowrate();
+    id = dwt_readdevid();
+    port_set_dw_ic_spi_fastrate();
+    return id;
+}
+
+/* ====================================================================
  *  Radar RX — bistatic 车内生命检测 (接收 STM32 的雷达脉冲)
  *
  *  STM32 = TX (连续发脉冲 @ 4Hz)

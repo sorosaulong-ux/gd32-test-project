@@ -17,6 +17,8 @@
 #include "buzzer.h"
 #include "key.h"
 #include "can_diag.h"
+#include "uwb.h"
+#include "uwb_port.h"
 #include <stdio.h>
 
 #define ESP8266_ONENET_INFO  "AT+CIPSTART=\"TCP\",\"mqtts.heclouds.com\",1883\r\n"
@@ -71,9 +73,11 @@ static void sys_health_check(void)
 {
     static uint16_t cnt;
     static uint8_t  last_wifi_ok = 1;
+    static uint8_t  last_uwb_ok = 1;
 
     if (++cnt >= 600) { cnt = 0;   /* 600 × 50ms = 30s */
 
+        /* ── WiFi 检测 ── */
         uint8_t wifi_ok = (ESP8266_SendCmd("AT\r\n", "OK") == 0);
 
         if (!wifi_ok && last_wifi_ok) {
@@ -85,6 +89,20 @@ static void sys_health_check(void)
             printf("[SYS] OK ESP8266 WiFi restored\r\n");
         }
         last_wifi_ok = wifi_ok;
+
+        /* ── UWB2 检测 ── */
+        uint32_t uwb_id = uwb_check_id();
+        uint8_t  uwb_ok = (uwb_id == 0xDECA0302U || uwb_id == 0xDECA0312U);
+
+        if (!uwb_ok && last_uwb_ok) {
+            can_diag_send_error(CAN_ERR_UWB, CAN_ERR_UWB_ID);
+            printf("[SYS] !! UWB2 ID error: 0x%08lX\r\n", (unsigned long)uwb_id);
+        }
+        if (uwb_ok && !last_uwb_ok) {
+            can_diag_send_error(0, 0);
+            printf("[SYS] OK UWB2 restored (0x%08lX)\r\n", (unsigned long)uwb_id);
+        }
+        last_uwb_ok = uwb_ok;
     }
 }
 

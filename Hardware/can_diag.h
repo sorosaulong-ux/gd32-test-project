@@ -34,6 +34,9 @@ extern "C" {
  * ====================================================================*/
 
 /* ── 错误码 ── */
+#define CAN_ERR_UWB              0x01
+#define   CAN_ERR_UWB_ID         0x01    /* device ID 异常 */
+
 #define CAN_ERR_ESP8266          0x02
 #define   CAN_ERR_ESP_WIFI       0x01
 #define   CAN_ERR_ESP_AT_TIMEOUT 0x02
