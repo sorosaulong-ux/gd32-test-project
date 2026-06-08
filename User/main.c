@@ -45,22 +45,30 @@ static void key1_init(void)
 
 static void key1_poll(void)
 {
-    static uint32_t last_ms;
-    static uint8_t  last_state = 1;   /* 1 = released (pull-up HIGH) */
+    static uint32_t stable_ms;   /* LOW 持续时长 */
+    static uint8_t  triggered;   /* 已触发标志 (防重复) */
+    static uint8_t  last_state = 1;
     uint32_t now = uwb_tick_get();
 
-    uint8_t cur = gpio_input_bit_get(GPIOC, GPIO_PIN_13);  /* LOW=pressed, HIGH=released */
+    uint8_t cur = gpio_input_bit_get(GPIOC, GPIO_PIN_13);  /* LOW=pressed */
 
-    /* Falling-edge: released→pressed, with 50ms debounce */
-    if (last_state == 1 && cur == 0 && (now - last_ms) > 50) {
-        last_ms = now;
-        if (BUZZER_Status == BUZZER_ON)
-            BUZZER_Set(BUZZER_OFF);
-        else
-            BUZZER_Set(BUZZER_ON);
+    if (cur == 0) {
+        /* 按下 — 累计 LOW 持续时间 */
+        if (last_state == 1) stable_ms = 0;  /* 刚按下，清零 */
+        last_state = 0;
+        if (!triggered && (now - stable_ms) > 500) {  /* ★ 500ms 长按才触发 */
+            triggered = 1;
+            if (BUZZER_Status == BUZZER_ON)
+                BUZZER_Set(BUZZER_OFF);
+            else
+                BUZZER_Set(BUZZER_ON);
+        }
+    } else {
+        /* 松开 — 恢复 */
+        last_state = 1;
+        triggered = 0;
+        stable_ms = now;
     }
-
-    last_state = cur;
 }
 
 /* ====================================================================
