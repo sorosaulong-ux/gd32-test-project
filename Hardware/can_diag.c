@@ -86,6 +86,39 @@ void can_diag_send_radar(uint8_t detected, uint8_t confidence)
 }
 
 /* ====================================================================
+ *  can_diag_send_error — 异步错误事件 (状态变化时发送)
+ *
+ *  同一 err_code+sub_code 连续调用只发一次，
+ *  调用 can_diag_send_error(0,0) 可强制重发。
+ * ====================================================================*/
+void can_diag_send_error(uint8_t err_code, uint8_t sub_code)
+{
+    static uint8_t last_err, last_sub;
+    uint8_t data[4];
+
+    /* 去重：同一个错误不反复发 */
+    if (err_code == last_err && sub_code == last_sub)
+        return;
+
+    last_err = err_code;
+    last_sub = sub_code;
+
+    data[0] = err_code;
+    data[1] = sub_code;
+    data[2] = 0x00;
+    data[3] = (err_code == 0 && sub_code == 0) ? 0x55 : 0xAA;  /* 55=正常, AA=故障 */
+
+    if (SUCCESS == can_send_std_frame(DTM_CAN2, CAN_ID_ERROR, data, 4)) {
+        s_tx_cnt++;
+        printf("[CAN-ERR] id=0x%03X err=%02X.%02X %s\r\n",
+               CAN_ID_ERROR, err_code, sub_code,
+               (err_code == 0) ? "CLEAR" : "FAULT");
+    } else {
+        s_err_cnt++;
+    }
+}
+
+/* ====================================================================
  *  can_diag_poll_command — check for master command (non-blocking)
  * ====================================================================*/
 int can_diag_poll_command(uint8_t *cmd, uint8_t *param)

@@ -17,7 +17,6 @@
 #include "buzzer.h"
 #include "key.h"
 #include "can_diag.h"
-
 #include <stdio.h>
 
 /* ====================================================================
@@ -69,6 +68,46 @@ static void network_init(void)
     BUZZER_Init();
 
     printf("[SYS] Ready — WiFi OK | OneNET OK | CAN 500kbps\r\n\r\n");
+
+    /* ★ 通知 GD32F3: 系统启动完成 */
+    can_diag_send_error(CAN_ERR_SYSTEM, CAN_ERR_SYS_BOOT);
+}
+
+/* ====================================================================
+ *  sys_health_check — 每 30s 检测各模块，异常时发 CAN 错误帧
+ *
+ *  检测项:
+ *    1. ESP8266: AT ping → 无回复 = WiFi 断连
+ *    2. UWB:     ID 读取 (后续加入)
+ *    3. CAN:     发送失败计数 (心跳函数内自动统计)
+ *
+ *  ★ 同一错误只发一次 (can_diag_send_error 内部去重)
+ * ====================================================================*/
+static void sys_health_check(void)
+{
+    /* ── ESP8266 AT ping (每 30s) ── */
+    {
+        static uint16_t cnt;
+        static uint8_t  last_wifi_ok = 1;
+
+        if (++cnt >= 600) { cnt = 0;   /* 600 × 50ms = 30s */
+
+            uint8_t wifi_ok = (ESP8266_SendCmd("AT\r\n", "OK") == 0);
+
+            if (!wifi_ok && last_wifi_ok) {
+                can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
+                printf("[SYS] !! ESP8266 WiFi lost\r\n");
+            }
+            if (wifi_ok && !last_wifi_ok) {
+                can_diag_send_error(0, 0);   /* 清除所有错误 */
+                printf("[SYS] OK ESP8266 WiFi restored\r\n");
+            }
+            last_wifi_ok = wifi_ok;
+        }
+    }
+
+    /* ── UWB 检测 (后续加入) ── */
+    /* if (uwb_read_id() == 0) can_diag_send_error(CAN_ERR_UWB, CAN_ERR_UWB_ID); */
 }
 
 /* ====================================================================
@@ -103,13 +142,8 @@ static void main_loop(void)
         /* ── 本地按键 ── */
         key1_poll();
 
-        /* ── CAN 状态 (每 10s 打印一次) ── */
-        {
-            static uint16_t cnt;
-            if (++cnt >= 200) { cnt = 0;
-                can_diag_print_status();
-            }
-        }
+        /* ── 系统健康检测 (30s一次) ── */
+        sys_health_check();
 
         /* ── UWB 测距 (后续) ── */
 
