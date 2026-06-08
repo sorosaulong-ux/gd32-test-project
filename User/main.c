@@ -46,17 +46,21 @@ static void key1_init(void)
 static void key1_poll(void)
 {
     static uint32_t last_ms;
+    static uint8_t  last_state = 1;   /* 1 = released (pull-up HIGH) */
     uint32_t now = uwb_tick_get();
 
-    if (now - last_ms < 50) return;  /* 50ms debounce */
+    uint8_t cur = gpio_input_bit_get(GPIOC, GPIO_PIN_13);  /* LOW=pressed, HIGH=released */
 
-    if (RESET == gpio_input_bit_get(GPIOC, GPIO_PIN_13)) {
+    /* Falling-edge: released→pressed, with 50ms debounce */
+    if (last_state == 1 && cur == 0 && (now - last_ms) > 50) {
         last_ms = now;
         if (BUZZER_Status == BUZZER_ON)
             BUZZER_Set(BUZZER_OFF);
         else
             BUZZER_Set(BUZZER_ON);
     }
+
+    last_state = cur;
 }
 
 /* ====================================================================
@@ -77,7 +81,7 @@ int main(void)
 
     uart_init();             /* debug printf → PH7/PH8 */
     BUZZER_Init();           /* PB13 */
-    key1_init();             /* PC13 按键中断 */
+    key1_init();             /* PC13 按键轮询 */
     /* UWB 暂时注释 — 后续加入 */
     /* uwb_ds_responder_init(); */
 

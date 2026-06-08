@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 /* ─── WiFi credentials — CHANGE THESE ─── */
-#define ESP8266_WIFI_INFO   "AT+CWJAP=\"YOUR_SSID\",\"YOUR_PASSWORD\"\r\n"
+#define ESP8266_WIFI_INFO   "AT+CWJAP=\"aaa\",\"88888888\"\r\n"
 
 void ESP8266_Clear(void)
 {
