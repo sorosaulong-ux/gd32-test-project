@@ -11,6 +11,8 @@
 #include "systick.h"
 #include "uart.h"
 #include "uwb.h"
+#include "uwb_port.h"
+#include "can.h"
 #include "can_diag.h"
 #include <stdio.h>
 

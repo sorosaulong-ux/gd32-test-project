@@ -490,6 +490,16 @@
               <FilePath>.\Hardware\can.h</FilePath>
             </File>
             <File>
+              <FileName>can_diag.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\can_diag.c</FilePath>
+            </File>
+            <File>
+              <FileName>can_diag.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\can_diag.h</FilePath>
+            </File>
+            <File>
               <FileName>uwb.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\uwb.c</FilePath>
