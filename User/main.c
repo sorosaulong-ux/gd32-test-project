@@ -103,6 +103,14 @@ static void main_loop(void)
         /* ── 本地按键 ── */
         key1_poll();
 
+        /* ── CAN 状态 (每 10s 打印一次) ── */
+        {
+            static uint16_t cnt;
+            if (++cnt >= 200) { cnt = 0;
+                can_diag_print_status();
+            }
+        }
+
         /* ── UWB 测距 (后续) ── */
 
         delay_ms(50);

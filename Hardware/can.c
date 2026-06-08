@@ -9,6 +9,7 @@
  */
 
 #include "can.h"
+#include "gd32a7xx_prpu.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -73,7 +74,12 @@ void can_gpio_config(void)
     rcu_dtm_can_clock_config(DTM_CAN7, RCU_DTM_CANSRC_PCLK2);
     rcu_periph_clock_enable(RCU_DTM_CAN7);
 
-    /* 2. GPIO 时钟 */
+    /* 2. ★ PRPU 解锁 — GPIOM/GPIOH 必须解锁才能写 AF 寄存器 */
+    prpu_periph_unlock(PRPU_GPIOH);
+    prpu_periph_unlock(PRPU_GPIOM);
+    prpu_periph_unlock(PRPU_GPIOB);
+
+    /* 3. GPIO 时钟 */
     rcu_periph_clock_enable(RCU_GPIOH);
     rcu_periph_clock_enable(RCU_GPIOM);
     rcu_periph_clock_enable(RCU_GPIOB);
