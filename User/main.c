@@ -3,7 +3,7 @@
  *  \brief   GD32A7 — WiFi+OneNET+CAN+Buzzer 整车诊断终端
  *
  *  KEY1 本地控制蜂鸣器 | OneNET 远程控制蜂鸣器
- *  CAN2 心跳上报 | UWB 测距 (后续加入)
+ *  CAN2 0x103 系统错误上报 | UWB 测距 (后续加入)
  */
 
 #include "gd32a7xx.h"
@@ -19,13 +19,10 @@
 #include "can_diag.h"
 #include <stdio.h>
 
-/* ====================================================================
- *  常量
- * ====================================================================*/
 #define ESP8266_ONENET_INFO  "AT+CIPSTART=\"TCP\",\"mqtts.heclouds.com\",1883\r\n"
 
 /* ====================================================================
- *  system_init — 所有硬件一次性初始化
+ *  system_init
  * ====================================================================*/
 static void system_init(void)
 {
@@ -33,23 +30,20 @@ static void system_init(void)
     gd_eval_led_init(LED2); gd_eval_led_off(LED2);
     gd_eval_led_init(LED3); gd_eval_led_off(LED3);
 
-    uart_init();             /* debug printf → PH7/PH8 */
-    key1_init();             /* PC13 按键 */
-    /* UWB + Buzzer 后续加入 */
+    uart_init();
+    key1_init();
 
     printf("\r\n=== GD32A7 Vehicle Terminal ===\r\n\r\n");
 }
 
 /* ====================================================================
- *  network_init — WiFi 连接 + OneNET 登录 + CAN 启动
+ *  network_init — WiFi → OneNET → CAN → Buzzer
  * ====================================================================*/
 static void network_init(void)
 {
-    /* 1. ESP8266 + WiFi */
     printf("[SYS] ESP8266 WiFi connecting...\r\n");
     ESP8266_Init();
 
-    /* 2. MQTT 服务器 */
     printf("[SYS] MQTT connecting...\r\n");
     while (ESP8266_SendCmd(ESP8266_ONENET_INFO, "CONNECT"))
         delay_ms(500);
@@ -61,72 +55,47 @@ static void network_init(void)
     }
     OneNET_Subscribe();
 
-    /* 3. CAN */
     can_diag_init();
-
-    /* 4. 蜂鸣器 — 最后初始化，确保不被其他模块干扰 */
     BUZZER_Init();
 
     printf("[SYS] Ready — WiFi OK | OneNET OK | CAN 500kbps\r\n\r\n");
 
-    /* ★ 通知 GD32F3: 系统启动完成 */
+    /* 通知 GD32F3: 启动完成 */
     can_diag_send_error(CAN_ERR_SYSTEM, CAN_ERR_SYS_BOOT);
 }
 
 /* ====================================================================
- *  sys_health_check — 每 30s 检测各模块，异常时发 CAN 错误帧
- *
- *  检测项:
- *    1. ESP8266: AT ping → 无回复 = WiFi 断连
- *    2. UWB:     ID 读取 (后续加入)
- *    3. CAN:     发送失败计数 (心跳函数内自动统计)
- *
- *  ★ 同一错误只发一次 (can_diag_send_error 内部去重)
+ *  sys_health_check — 每 30s AT ping 检测 WiFi
  * ====================================================================*/
 static void sys_health_check(void)
 {
-    /* ── ESP8266 AT ping (每 30s) ── */
-    {
-        static uint16_t cnt;
-        static uint8_t  last_wifi_ok = 1;
+    static uint16_t cnt;
+    static uint8_t  last_wifi_ok = 1;
 
-        if (++cnt >= 600) { cnt = 0;   /* 600 × 50ms = 30s */
+    if (++cnt >= 600) { cnt = 0;   /* 600 × 50ms = 30s */
 
-            uint8_t wifi_ok = (ESP8266_SendCmd("AT\r\n", "OK") == 0);
+        uint8_t wifi_ok = (ESP8266_SendCmd("AT\r\n", "OK") == 0);
 
-            if (!wifi_ok && last_wifi_ok) {
-                can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
-                printf("[SYS] !! ESP8266 WiFi lost\r\n");
-            }
-            if (wifi_ok && !last_wifi_ok) {
-                can_diag_send_error(0, 0);   /* 清除所有错误 */
-                printf("[SYS] OK ESP8266 WiFi restored\r\n");
-            }
-            last_wifi_ok = wifi_ok;
+        if (!wifi_ok && last_wifi_ok) {
+            can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
+            printf("[SYS] !! ESP8266 WiFi lost\r\n");
         }
+        if (wifi_ok && !last_wifi_ok) {
+            can_diag_send_error(0, 0);
+            printf("[SYS] OK ESP8266 WiFi restored\r\n");
+        }
+        last_wifi_ok = wifi_ok;
     }
-
-    /* ── UWB 检测 (后续加入) ── */
-    /* if (uwb_read_id() == 0) can_diag_send_error(CAN_ERR_UWB, CAN_ERR_UWB_ID); */
 }
 
 /* ====================================================================
- *  main_loop — 5 任务轮询, 50ms 周期
+ *  main_loop
  * ====================================================================*/
 static void main_loop(void)
 {
     unsigned short tick_5s = 0;
 
     while (1) {
-        /* ── CAN 心跳 1Hz ── */
-        {
-            static uint16_t cnt;
-            if (++cnt >= 20) { cnt = 0;
-                can_diag_send_heartbeat(0, 0);
-                gd_eval_led_toggle(LED2);
-            }
-        }
-
         /* ── OneNET 上报 5s ── */
         if (++tick_5s >= 100) { tick_5s = 0;
             OneNet_SendData();
@@ -142,10 +111,10 @@ static void main_loop(void)
         /* ── 本地按键 ── */
         key1_poll();
 
-        /* ── 系统健康检测 (30s一次) ── */
+        /* ── 系统健康检测 ── */
         sys_health_check();
 
-        /* ── UWB 测距 (后续) ── */
+        /* ── UWB (后续加入) ── */
 
         delay_ms(50);
     }
@@ -163,6 +132,6 @@ int main(void)
     system_init();
     network_init();
 
-    gd_eval_led_on(LED1);    /* 系统就绪 */
+    gd_eval_led_on(LED1);
     main_loop();
 }
