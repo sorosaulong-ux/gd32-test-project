@@ -80,3 +80,21 @@ void can_diag_send_ranging(float distance_m)
         s_err_cnt++;
     }
 }
+
+/* ====================================================================
+ *  can_diag_send_radar — child/pet detection alert, ID 0x102
+ * ====================================================================*/
+void can_diag_send_radar(uint8_t detected, uint8_t confidence)
+{
+    uint8_t data[4];
+    data[0] = detected;
+    data[1] = confidence;
+    data[2] = 0x00;
+    data[3] = 0x00;
+
+    if (SUCCESS == can_send_std_frame(DTM_CAN2, CAN_ID_RADAR, data, 4)) {
+        s_tx_cnt++;
+    } else {
+        s_err_cnt++;
+    }
+}
