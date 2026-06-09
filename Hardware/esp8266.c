@@ -9,6 +9,7 @@
 #include "usart_esp.h"
 #include "uwb_port.h"
 #include "onenet.h"
+#include "can_diag.h"
 #include <string.h>
 #include <stdio.h>
 
