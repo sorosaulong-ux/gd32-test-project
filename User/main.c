@@ -42,15 +42,19 @@ static sys_mode_t g_mode = MODE_RADAR;   /* 默认雷达(ML检测) */
 static void key2_init(void)
 {
     rcu_periph_clock_enable(RCU_GPIOL);
+    prpu_periph_unlock(PRPU_GPIOL);  /* GPIOL 需要解锁 */
     gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_3);
 }
 
 static void key2_poll(void)
 {
     static uint32_t last_ms;
-    static uint8_t  last_state = 1;
+    static int8_t  last_state = -1;  /* -1 = 首次, 从实际引脚读取 */
     uint32_t now = uwb_tick_get();
     uint8_t  cur = gpio_input_bit_get(GPIOL, GPIO_PIN_3);
+
+    /* 首次调用 — 用实际引脚电平初始化, 避免浮空误触发 */
+    if (last_state < 0) { last_state = (int8_t)cur; return; }
 
     if (last_state == 1 && cur == 0 && (now - last_ms) > 500) {
         last_ms = now;
