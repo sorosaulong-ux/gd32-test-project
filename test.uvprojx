@@ -340,7 +340,7 @@
               <MiscControls>-Wassign-enum</MiscControls>
               <Define>GD32A711X_A712X,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User;.\DW3000;.\NET\MQTT;.\NET\onenet\inc;.\NET\CJSON</IncludePath>
+              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User;.\DW3000;.\py;.\NET\MQTT;.\NET\onenet\inc;.\NET\CJSON</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -563,6 +563,21 @@
               <FileName>usart_esp.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Hardware\usart_esp.h</FilePath>
+            </File>
+            <File>
+              <FileName>ml_predict.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\ml_predict.c</FilePath>
+            </File>
+            <File>
+              <FileName>ml_predict.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\ml_predict.h</FilePath>
+            </File>
+            <File>
+              <FileName>model_weights.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\py\model_weights.h</FilePath>
             </File>
           </Files>
         </Group>

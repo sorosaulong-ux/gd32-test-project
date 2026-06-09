@@ -21,6 +21,7 @@
 #include "can_diag.h"
 #include "uwb.h"
 #include "uwb_port.h"
+#include "ml_predict.h"
 
 #include <stdio.h>
 
@@ -183,6 +184,25 @@ static void mode_radar(void)
         gd_eval_led_toggle(LED3);
         uwb_radar_csv(&res);
         rad_seq++;
+
+        /* ── ML 推理: 空车(0) vs 有人(1) ── */
+        float prob;
+        int   human = ml_predict(&res, &prob);
+
+        /* 状态变化时上报 CAN + 打印 */
+        {
+            static int last_state = -1;
+            if (human != last_state) {
+                last_state = human;
+                if (human) {
+                    printf("[DETECT] HUMAN present  p=%.2f\r\n", prob);
+                    can_diag_send_radar(1, (uint8_t)(prob * 100.0f));
+                } else {
+                    printf("[DETECT] EMPTY  p=%.2f\r\n", prob);
+                    can_diag_send_radar(0, 0);
+                }
+            }
+        }
     } else {
         printf(".\r\n");
     }
