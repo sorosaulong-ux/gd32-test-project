@@ -85,8 +85,8 @@ void UWB_SPI_Init(void)
 /* ====================================================================
  *  SPI speed
  * ====================================================================*/
-void port_set_dw_ic_spi_slowrate(void) { bb_nop = 500; } /* ~40kHz, 3 delays/bit */
-void port_set_dw_ic_spi_fastrate(void) { bb_nop = 2;   } /* ~13MHz — short wires */
+void port_set_dw_ic_spi_slowrate(void) { bb_nop = 12; }
+void port_set_dw_ic_spi_fastrate(void) { bb_nop = 2;  }
 
 /* ====================================================================
  *  reset_DWIC()
@@ -128,8 +128,7 @@ static uint8_t bb_xfer(uint8_t tx)
         if (tx & (1U << b)) mosi_h(); else mosi_l();
         bb_delay();
         sck_h();
-        bb_delay();           /* SCK settle */
-        bb_delay();           /* ★ extra — DW3000 response + MISO propagation on long wire */
+        bb_delay();
         if (miso_r()) rx |= (1U << b);
         sck_l();
         bb_delay();
