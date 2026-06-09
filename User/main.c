@@ -25,8 +25,6 @@
 
 #include <stdio.h>
 
-#define ESP8266_ONENET_INFO  "AT+CIPSTART=\"TCP\",\"mqtts.heclouds.com\",1883\r\n"
-
 /* ── 调试开关 ── */
 #define UWB_CSV_OUTPUT      /* 取消注释 = 串口输出 CIR CSV (Python 采集用) */
 
@@ -86,28 +84,15 @@ static void system_init(void)
 }
 
 /* ====================================================================
- *  network_init — WiFi → OneNET → CAN → Buzzer
+ *  network_init — CAN + Buzzer (立即完成), WiFi 后台状态机启动
  * ====================================================================*/
 static void network_init(void)
 {
-    printf("[SYS] ESP8266 WiFi...\r\n");
-    ESP8266_Init();
-
-    printf("[SYS] MQTT connect...\r\n");
-    while (ESP8266_SendCmd(ESP8266_ONENET_INFO, "CONNECT"))
-        delay_ms(500);
-
-    printf("[SYS] Device login...\r\n");
-    while (OneNet_DevLink()) {
-        ESP8266_SendCmd(ESP8266_ONENET_INFO, "CONNECT");
-        delay_ms(500);
-    }
-    OneNET_Subscribe();
-
     can_diag_init();
     BUZZER_Init();
 
-    printf("[SYS] Ready — WiFi+OneNET+CAN OK\r\n\r\n");
+    printf("[SYS] CAN+Buzzer ready, WiFi connecting in background...\r\n\r\n");
+    wifi_sm_start();  /* 非阻塞状态机 — main_loop 驱动 */
     can_diag_send_error(CAN_ERR_SYSTEM, CAN_ERR_SYS_BOOT);
 }
 
@@ -117,22 +102,11 @@ static void network_init(void)
 static void health_check(void)
 {
     static uint16_t cnt;
-    static uint8_t  last_wifi_ok = 1;
     static uint8_t  last_uwb_ok  = 1;
 
     if (++cnt < 600) return; cnt = 0;
 
-    uint8_t wifi_ok = (ESP8266_SendCmd("AT\r\n", "OK") == 0);
-    if (!wifi_ok && last_wifi_ok) {
-        can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
-        printf("[SYS] !! WiFi lost\r\n");
-    }
-    if (wifi_ok && !last_wifi_ok) {
-        can_diag_send_error(0, 0);
-        printf("[SYS] OK WiFi restored\r\n");
-    }
-    last_wifi_ok = wifi_ok;
-
+    /* ── UWB2 ID 检测 ── */
     uint32_t id = uwb_check_id();
     uint8_t  uwb_ok = (id == 0xDECA0302U || id == 0xDECA0312U);
     if (!uwb_ok && last_uwb_ok) {
@@ -144,6 +118,8 @@ static void health_check(void)
         printf("[SYS] OK UWB2 restored\r\n");
     }
     last_uwb_ok = uwb_ok;
+
+    /* WiFi 错误由 esp8266.c 状态机自动上报 (WIFI_SM_DEAD → CAN_ERR_ESP_WIFI) */
 }
 
 /* ====================================================================
@@ -227,22 +203,25 @@ static void main_loop(void)
     unsigned short tick_5s = 0;
 
     while (1) {
-        /* OneNET 上报 5s */
-        if (++tick_5s >= 100) { tick_5s = 0;
-            OneNet_SendData(); ESP8266_Clear();
+        /* ── WiFi 状态机 (非阻塞, <1ms) ── */
+        wifi_sm_tick();
+
+        /* ── OneNET 上报 + 云指令 (仅 WiFi OK 时) ── */
+        if (wifi_sm_ready()) {
+            if (++tick_5s >= 100) { tick_5s = 0;
+                OneNet_SendData(); ESP8266_Clear();
+            }
+            { unsigned char *p = ESP8266_GetIPD(0); if (p) OneNet_RevPro(p); }
         }
 
-        /* 云平台指令 */
-        { unsigned char *p = ESP8266_GetIPD(0); if (p) OneNet_RevPro(p); }
-
-        /* 按键 */
+        /* ── 按键 ── */
         key1_poll();
         key2_poll();
 
-        /* 当前模式 */
+        /* ── 当前模式 ── */
         if (g_mode == MODE_RANGING) mode_ranging(); else mode_radar();
 
-        /* 健康检测 */
+        /* ── 健康检测 ── */
         health_check();
 
         delay_ms(50);

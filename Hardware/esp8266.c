@@ -1,21 +1,38 @@
 /*!
  *  \file    esp8266.c
- *  \brief   ESP8266 AT-command driver — GD32A7 port
- *
- *  UART3 (PJ7/PJ8) @ 115200 → ESP8266
- *  Uses interrupt RX (LINFlexD3_IRQHandler in usart_esp.c)
+ *  \brief   ESP8266 AT-command driver — GD32A7 (blocking + non-blocking)
  */
 
 #include "gd32a7xx.h"
 #include "esp8266.h"
 #include "delay.h"
 #include "usart_esp.h"
+#include "uwb_port.h"
+#include "onenet.h"
 #include <string.h>
 #include <stdio.h>
 
-/* ─── WiFi credentials — CHANGE THESE ─── */
+/* ─── WiFi credentials ─── */
 #define ESP8266_WIFI_INFO   "AT+CWJAP=\"aaa\",\"88888888\"\r\n"
+#define ESP8266_ONENET_TCP  "AT+CIPSTART=\"TCP\",\"mqtts.heclouds.com\",1883\r\n"
 
+/* ─── Non‑blocking command state ─── */
+static const char   *cmd_expect;
+static uint32_t      cmd_sent_ms;
+static uint8_t       cmd_active;
+#define CMD_TIMEOUT_MS  8000
+
+/* ─── WiFi state machine ─── */
+static wifi_sm_state_t sm_state = WIFI_SM_IDLE;
+static uint32_t        sm_step_ms;
+static uint8_t         sm_retry;
+#define SM_RETRY_MAX     3
+#define SM_STEP_TIMEOUT  10000    /* ms — per‑step timeout */
+#define SM_DEAD_WAIT     60000    /* ms — retry interval */
+
+/* ====================================================================
+ *  Blocking helpers (unchanged — used by ESP8266_SendData etc.)
+ * ====================================================================*/
 void ESP8266_Clear(void)
 {
     memset(esp8266_buf, 0, sizeof(esp8266_buf));
@@ -25,38 +42,30 @@ void ESP8266_Clear(void)
 static int ESP8266_WaitRecive(void)
 {
     if (esp8266_cnt == 0)       return REV_WAIT;
-    if (esp8266_cnt == esp8266_cntPre) {
-        esp8266_cnt = 0;
-        return REV_OK;
-    }
+    if (esp8266_cnt == esp8266_cntPre) { esp8266_cnt = 0; return REV_OK; }
     esp8266_cntPre = esp8266_cnt;
     return REV_WAIT;
 }
 
-/* ─── Send AT command, wait for expected response ─── */
 int ESP8266_SendCmd(char *cmd, char *res)
 {
     unsigned char timeOut = 200;
-
     Usart_SendString(0, (unsigned char *)cmd, strlen(cmd));
-
     while (timeOut--) {
         if (ESP8266_WaitRecive() == REV_OK) {
             if (strstr((const char *)esp8266_buf, res) != NULL) {
                 ESP8266_Clear();
-                return 0;  /* success */
+                return 0;
             }
         }
         delay_ms(10);
     }
-    return 1;  /* timeout */
+    return 1;
 }
 
-/* ─── Send data via CIPSEND ─── */
 void ESP8266_SendData(unsigned char *data, unsigned short len)
 {
     char cmdBuf[32];
-
     ESP8266_Clear();
     snprintf(cmdBuf, sizeof(cmdBuf), "AT+CIPSEND=%d\r\n", (int)len);
     if (!ESP8266_SendCmd(cmdBuf, ">")) {
@@ -64,47 +73,231 @@ void ESP8266_SendData(unsigned char *data, unsigned short len)
     }
 }
 
-/* ─── Extract payload from +IPD,N:data ─── */
 unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 {
     char *ptrIPD = NULL;
-
     do {
         if (ESP8266_WaitRecive() == REV_OK) {
             ptrIPD = strstr((char *)esp8266_buf, "IPD,");
             if (ptrIPD != NULL) {
                 ptrIPD = strchr(ptrIPD, ':');
-                if (ptrIPD != NULL) {
-                    ptrIPD++;
-                    return (unsigned char *)ptrIPD;
-                }
-                return NULL;
+                return (ptrIPD != NULL) ? (unsigned char *)(ptrIPD + 1) : NULL;
             }
         }
         delay_ms(5);
     } while (timeOut--);
-
     return NULL;
 }
 
-/* ─── ESP8266 AT init sequence ─── */
+/* ====================================================================
+ *  ESP8266_Init — 保留原有阻塞版本（非阻塞状态机复用它但分步走）
+ * ====================================================================*/
 void ESP8266_Init(void)
 {
     usart3_esp_init(115200UL);
-
     ESP8266_Clear();
 
     printf("[ESP] 1. AT\r\n");
     while (ESP8266_SendCmd("AT\r\n", "OK")) delay_ms(500);
-
     printf("[ESP] 2. CWMODE=1\r\n");
     while (ESP8266_SendCmd("AT+CWMODE=1\r\n", "OK")) delay_ms(500);
-
     printf("[ESP] 3. CWDHCP\r\n");
     while (ESP8266_SendCmd("AT+CWDHCP=1,1\r\n", "OK")) delay_ms(500);
-
     printf("[ESP] 4. CWJAP (connecting WiFi...)\r\n");
     while (ESP8266_SendCmd(ESP8266_WIFI_INFO, "GOT IP")) delay_ms(500);
-
     printf("[ESP] 5. Init OK\r\n");
+}
+
+/* ====================================================================
+ *  Non‑blocking command
+ * ====================================================================*/
+void esp8266_cmd_send(const char *cmd, const char *expect)
+{
+    ESP8266_Clear();
+    Usart_SendString(0, (unsigned char *)cmd, strlen(cmd));
+    cmd_expect  = expect;
+    cmd_sent_ms = uwb_tick_get();
+    cmd_active  = 1;
+}
+
+int esp8266_cmd_done(void)
+{
+    if (!cmd_active) return 1;
+
+    /* Check RX buffer */
+    if (ESP8266_WaitRecive() == REV_OK) {
+        cmd_active = 0;
+        if (strstr((const char *)esp8266_buf, cmd_expect) != NULL) {
+            ESP8266_Clear();
+            return 1;  /* success */
+        }
+        return -1; /* wrong response */
+    }
+
+    if (uwb_tick_get() - cmd_sent_ms > CMD_TIMEOUT_MS) {
+        cmd_active = 0;
+        return -1; /* timeout */
+    }
+    return 0;  /* still waiting */
+}
+
+/* ====================================================================
+ *  WiFi state machine
+ * ====================================================================*/
+
+static void sm_next(wifi_sm_state_t s)
+{
+    sm_state   = s;
+    sm_step_ms = uwb_tick_get();
+    sm_retry   = 0;
+}
+
+void wifi_sm_start(void)
+{
+    /* UART already initialised by ESP8266_Init() or will be by first step */
+    sm_next(WIFI_SM_INIT_UART);
+}
+
+void wifi_sm_tick(void)
+{
+    uint32_t now = uwb_tick_get();
+
+    switch (sm_state) {
+
+    case WIFI_SM_IDLE:
+    case WIFI_SM_DEAD:
+        /* 等待 DEAD_WAIT 后自动重试 */
+        if ((int32_t)(now - sm_step_ms) > SM_DEAD_WAIT) {
+            printf("[WiFi] Retrying...\r\n");
+            sm_next(WIFI_SM_INIT_UART);
+        }
+        break;
+
+    case WIFI_SM_INIT_UART:
+        /* 确保 UART3 已初始化 */
+        usart3_esp_init(115200UL);
+        sm_next(WIFI_SM_AT);
+        break;
+
+    case WIFI_SM_AT:
+        ESP8266_Clear();
+        esp8266_cmd_send("AT\r\n", "OK");
+        sm_next(WIFI_SM_CWMODE);
+        break;
+
+    case WIFI_SM_CWMODE:
+    case WIFI_SM_CWDHCP:
+    case WIFI_SM_CWJAP:
+    case WIFI_SM_TCP:
+    case WIFI_SM_MQTT_CONNECT:
+    case WIFI_SM_MQTT_SUBSCRIBE:
+        /* ── 等当前命令完成 ── */
+        {
+            int rc = esp8266_cmd_done();
+            if (rc == 0) return;  /* 还在等 */
+
+            if (rc == -1) {
+                /* 超时或错误 → 重试 */
+                if (++sm_retry > SM_RETRY_MAX) {
+                    printf("[WiFi] Step %d failed (%d retries), DEAD\r\n",
+                           (int)sm_state, SM_RETRY_MAX);
+                    sm_next(WIFI_SM_DEAD);
+                    can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
+                    return;
+                }
+                /* 重发同一命令 */
+                goto resend;
+            }
+
+            /* rc == 1 → 成功, 走下一步 */
+            sm_retry = 0;
+        }
+
+        /* ── 发送下一步命令 ── */
+        {
+            wifi_sm_state_t prev = sm_state;
+
+            switch (prev) {
+            case WIFI_SM_CWMODE:
+                esp8266_cmd_send("AT+CWMODE=1\r\n", "OK");
+                sm_next(WIFI_SM_CWDHCP);
+                break;
+            case WIFI_SM_CWDHCP:
+                esp8266_cmd_send("AT+CWDHCP=1,1\r\n", "OK");
+                sm_next(WIFI_SM_CWJAP);
+                break;
+            case WIFI_SM_CWJAP:
+                esp8266_cmd_send(ESP8266_WIFI_INFO, "GOT IP");
+                sm_next(WIFI_SM_TCP);
+                break;
+            case WIFI_SM_TCP:
+                esp8266_cmd_send(ESP8266_ONENET_TCP, "CONNECT");
+                sm_next(WIFI_SM_MQTT_CONNECT);
+                break;
+            case WIFI_SM_MQTT_CONNECT:
+                if (OneNet_DevLink() == 0) {
+                    esp8266_cmd_send("__SUBSCRIBE__", "OK");  /* dummy */
+                    sm_next(WIFI_SM_MQTT_SUBSCRIBE);
+                } else {
+                    sm_retry++;
+                    if (sm_retry > SM_RETRY_MAX) {
+                        sm_next(WIFI_SM_DEAD);
+                        can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
+                    } else {
+                        sm_next(WIFI_SM_TCP);  /* 回退到 TCP 重来 */
+                    }
+                }
+                break;
+            case WIFI_SM_MQTT_SUBSCRIBE:
+                OneNET_Subscribe();
+                sm_next(WIFI_SM_OK);
+                printf("[WiFi] ONLINE\r\n");
+                can_diag_send_error(0, 0);  /* 清除错误 */
+                break;
+            default:
+                break;
+            }
+
+            if (sm_state == prev) {
+                /* 失败留在原状态 → 如果超时太长也切 DEAD */
+                if ((int32_t)(now - sm_step_ms) > SM_STEP_TIMEOUT * 5) {
+                    printf("[WiFi] Global timeout, DEAD\r\n");
+                    sm_next(WIFI_SM_DEAD);
+                }
+            }
+        }
+        break;
+
+    case WIFI_SM_OK:
+        /* 正常运行 — 每 30s ping 一次由 main.c health_check 负责 */
+        break;
+
+    default:
+        sm_next(WIFI_SM_IDLE);
+        break;
+    }
+
+    return;
+
+resend:
+    /* 重发当前步骤的命令 */
+    ESP8266_Clear();
+    switch (sm_state) {
+    case WIFI_SM_CWMODE:     esp8266_cmd_send("AT+CWMODE=1\r\n", "OK"); break;
+    case WIFI_SM_CWDHCP:    esp8266_cmd_send("AT+CWDHCP=1,1\r\n", "OK"); break;
+    case WIFI_SM_CWJAP:     esp8266_cmd_send(ESP8266_WIFI_INFO, "GOT IP"); break;
+    case WIFI_SM_TCP:       esp8266_cmd_send(ESP8266_ONENET_TCP, "CONNECT"); break;
+    default: break;
+    }
+}
+
+int wifi_sm_ready(void)
+{
+    return (sm_state == WIFI_SM_OK);
+}
+
+void wifi_sm_force_restart(void)
+{
+    printf("[WiFi] Force restart\r\n");
+    sm_next(WIFI_SM_DEAD);
 }
