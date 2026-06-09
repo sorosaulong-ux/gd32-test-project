@@ -12,6 +12,14 @@
 static uint32_t s_tx_cnt;
 static uint32_t s_err_cnt;
 
+static void be32(uint8_t *buf, uint32_t val)
+{
+    buf[0] = (uint8_t)(val >> 24);
+    buf[1] = (uint8_t)(val >> 16);
+    buf[2] = (uint8_t)(val >> 8);
+    buf[3] = (uint8_t)(val);
+}
+
 /* ====================================================================
  *  can_diag_init
  * ====================================================================*/
@@ -51,6 +59,23 @@ void can_diag_send_error(uint8_t err_code, uint8_t sub_code)
         s_tx_cnt++;
         printf("[CAN-ERR] 0x103 err=%02X.%02X %s\r\n",
                err_code, sub_code, (err_code == 0) ? "CLEAR" : "FAULT");
+    } else {
+        s_err_cnt++;
+    }
+}
+
+/* ====================================================================
+ *  can_diag_send_ranging — distance (m) → mm big-endian, ID 0x101
+ * ====================================================================*/
+void can_diag_send_ranging(float distance_m)
+{
+    uint8_t data[4];
+    int32_t mm = (int32_t)(distance_m * 1000.0f);
+    if (mm < 0) mm = 0;
+    be32(data, (uint32_t)mm);
+
+    if (SUCCESS == can_send_std_frame(DTM_CAN2, CAN_ID_RANGING, data, 4)) {
+        s_tx_cnt++;
     } else {
         s_err_cnt++;
     }

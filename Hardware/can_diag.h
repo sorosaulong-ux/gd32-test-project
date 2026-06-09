@@ -19,6 +19,7 @@ extern "C" {
 /* ====================================================================
  *  CAN message IDs
  * ====================================================================*/
+#define CAN_ID_RANGING      0x101U
 #define CAN_ID_ERROR        0x103U
 
 /* ====================================================================
@@ -57,6 +58,7 @@ extern "C" {
  * ====================================================================*/
 void can_diag_init(void);
 void can_diag_send_error(uint8_t err_code, uint8_t sub_code);
+void can_diag_send_ranging(float distance_m);
 
 #ifdef __cplusplus
 }
