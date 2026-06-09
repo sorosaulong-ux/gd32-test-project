@@ -331,3 +331,216 @@ void uwb_radar_scan_simple(void) {
         printf("[RADAR] FP=%u\r\n",diag.ipatovFpIndex>>6);
     }else{ dwt_write32bitreg(SYS_STATUS_ID,SYS_STATUS_ALL_RX_ERR); printf("[RADAR] No RX\r\n"); }
 }
+
+/* ====================================================================
+ *  ★★★  DS-TWR RESPONDER (ex_05b) — single UWB2, with STM32 initiator ★★★
+ * ====================================================================*/
+#define TX_ANT_DLY           16385
+#define RX_ANT_DLY           16385
+#define SPEED_OF_LIGHT       299702547.0
+#define UUS_TO_DWT_TIME      63898
+#define RXFL_MASK_1023       0x000003FFUL
+
+#define DS_POLL_RX_TO_RESP_TX_DLY_UUS   8000
+#define DS_RESP_TX_TO_FINAL_RX_DLY_UUS  2000
+#define DS_FINAL_RX_TIMEOUT_UUS         5000
+#define DS_PRE_TIMEOUT                  0
+
+static uint8_t ds_rx_poll[]  = {0x41,0x88,0,0xCA,0xDE,'W','A','V','E',0x21,0,0};
+static uint8_t ds_tx_resp[]  = {0x41,0x88,0,0xCA,0xDE,'V','E','W','A',0x10,0x02,0,0,0,0};
+static uint8_t ds_rx_final[] = {0x41,0x88,0,0xCA,0xDE,'W','A','V','E',0x23,
+                                 0,0,0,0, 0,0,0,0, 0,0,0,0};
+
+#define DS_RX_BUF_LEN             24
+#define DS_ALL_MSG_COMMON_LEN     10
+#define DS_ALL_MSG_SN_IDX         2
+#define DS_FINAL_MSG_POLL_TX_IDX  10
+#define DS_FINAL_MSG_RESP_RX_IDX  14
+#define DS_FINAL_MSG_FINAL_TX_IDX 18
+#define DS_FINAL_MSG_TS_LEN       4
+
+static uint8_t  ds_rx_buf[DS_RX_BUF_LEN];
+static uint8_t  ds_fsn;
+static uint32_t ds_status_reg;
+
+static uint64_t ds_poll_rx_ts;
+static uint64_t ds_resp_tx_ts;
+static uint64_t ds_final_rx_ts;
+
+static uint64_t ds_get_rx_timestamp_u64(void) {
+    uint8_t t[5]; uint64_t v = 0; dwt_readrxtimestamp(t);
+    for (int i = 4; i >= 0; i--) { v <<= 8; v |= t[i]; } return v;
+}
+static uint64_t ds_get_tx_timestamp_u64(void) {
+    uint8_t t[5]; uint64_t v = 0; dwt_readtxtimestamp(t);
+    for (int i = 4; i >= 0; i--) { v <<= 8; v |= t[i]; } return v;
+}
+static void ds_final_msg_get_ts(const uint8_t *ts_field, uint32_t *ts) {
+    *ts = 0;
+    for (int i = 0; i < DS_FINAL_MSG_TS_LEN; i++)
+        *ts += ((uint32_t)ts_field[i]) << (i * 8);
+}
+
+int uwb_ds_responder_init(void)
+{
+    UWB_SPI_Init();
+    Active_UWB = 2;
+
+    port_set_dw_ic_spi_fastrate();
+    reset_DWIC();
+    Sleep(2);
+
+    while (!dwt_checkidlerc());
+
+    if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
+        printf("[DS-RESP] init FAILED\r\n");
+        return UWB_ERR_NO_DEVICE;
+    }
+    if (dwt_configure(&uwb_config)) {
+        printf("[DS-RESP] config FAILED\r\n");
+        return UWB_ERR_NO_DEVICE;
+    }
+
+    { dwt_txconfig_t tp = { 0x34, 0xfdfdfdfd, 0x0 }; dwt_configuretxrf(&tp); }
+
+    dwt_setrxantennadelay(RX_ANT_DLY);
+    dwt_settxantennadelay(TX_ANT_DLY);
+    dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
+
+    printf("[DS-RESP] Ready, id=0x%08lX\r\n", (unsigned long)dwt_readdevid());
+    return UWB_OK;
+}
+
+int uwb_ds_responder_poll(double *dist)
+{
+    uint32_t frame_len;
+    int ret;
+
+    /* Phase 1: Wait for Poll */
+    dwt_setpreambledetecttimeout(0);
+    dwt_setrxtimeout(0);
+    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+
+    while (!((ds_status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
+             (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
+    { }
+
+    if (!(ds_status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+        return 0;
+    }
+
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+    frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFL_MASK_1023;
+    if (frame_len <= DS_RX_BUF_LEN)
+        dwt_readrxdata(ds_rx_buf, frame_len, 0);
+
+    ds_rx_buf[DS_ALL_MSG_SN_IDX] = 0;
+    if (memcmp(ds_rx_buf, ds_rx_poll, DS_ALL_MSG_COMMON_LEN) != 0)
+        return 0;
+
+    /* Phase 2: Send Response */
+    ds_poll_rx_ts = ds_get_rx_timestamp_u64();
+
+    {
+        uint32_t resp_tx_time;
+        resp_tx_time = (uint32_t)((ds_poll_rx_ts +
+            (DS_POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8);
+        dwt_setdelayedtrxtime(resp_tx_time);
+    }
+
+    dwt_setrxaftertxdelay(DS_RESP_TX_TO_FINAL_RX_DLY_UUS);
+    dwt_setrxtimeout(DS_FINAL_RX_TIMEOUT_UUS);
+    dwt_setpreambledetecttimeout(DS_PRE_TIMEOUT);
+
+    ds_tx_resp[DS_ALL_MSG_SN_IDX] = ds_fsn;
+    dwt_writetxdata(sizeof(ds_tx_resp), ds_tx_resp, 0);
+    dwt_writetxfctrl(sizeof(ds_tx_resp), 0, 1);
+    ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
+
+    if (ret == DWT_ERROR) {
+        dwt_setrxaftertxdelay(DS_RESP_TX_TO_FINAL_RX_DLY_UUS);
+        dwt_setrxtimeout(DS_FINAL_RX_TIMEOUT_UUS);
+        dwt_setpreambledetecttimeout(DS_PRE_TIMEOUT);
+        ds_tx_resp[DS_ALL_MSG_SN_IDX] = ds_fsn;
+        dwt_writetxdata(sizeof(ds_tx_resp), ds_tx_resp, 0);
+        dwt_writetxfctrl(sizeof(ds_tx_resp), 0, 1);
+        ret = dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+    }
+
+    if (ret == DWT_ERROR) {
+        printf("[DS-RESP] starttx FAIL\r\n");
+        return 0;
+    }
+
+    /* Phase 3: Wait for Final */
+    while (!((ds_status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
+             (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
+    { }
+
+    ds_fsn++;
+    if (!(ds_status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
+        dwt_write32bitreg(SYS_STATUS_ID,
+            SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
+        return 0;
+    }
+
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+    frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFL_MASK_1023;
+    if (frame_len <= DS_RX_BUF_LEN)
+        dwt_readrxdata(ds_rx_buf, frame_len, 0);
+
+    ds_rx_buf[DS_ALL_MSG_SN_IDX] = 0;
+    if (memcmp(ds_rx_buf, ds_rx_final, DS_ALL_MSG_COMMON_LEN) != 0)
+        return 0;
+
+    /* Compute DS-TWR distance */
+    ds_resp_tx_ts  = ds_get_tx_timestamp_u64();
+    ds_final_rx_ts = ds_get_rx_timestamp_u64();
+
+    {
+        uint32_t poll_tx_ts, resp_rx_ts, final_tx_ts;
+        double Ra, Rb, Da, Db;
+        int64_t tof_dtu;
+
+        ds_final_msg_get_ts(&ds_rx_buf[DS_FINAL_MSG_POLL_TX_IDX],  &poll_tx_ts);
+        ds_final_msg_get_ts(&ds_rx_buf[DS_FINAL_MSG_RESP_RX_IDX],  &resp_rx_ts);
+        ds_final_msg_get_ts(&ds_rx_buf[DS_FINAL_MSG_FINAL_TX_IDX], &final_tx_ts);
+
+        Ra = (double)(resp_rx_ts - poll_tx_ts);
+        Rb = (double)((uint32_t)ds_final_rx_ts - (uint32_t)ds_resp_tx_ts);
+        Da = (double)(final_tx_ts - resp_rx_ts);
+        Db = (double)((uint32_t)ds_resp_tx_ts - (uint32_t)ds_poll_rx_ts);
+        tof_dtu = (int64_t)((Ra * Rb - Da * Db) / (Ra + Rb + Da + Db));
+
+        *dist = ((double)tof_dtu * DWT_TIME_UNITS) * SPEED_OF_LIGHT;
+        printf("[DS-RESP] dist=%.3f m\r\n", *dist);
+    }
+    return 1;
+}
+
+/* ====================================================================
+ *  uwb_check_id — 读 UWB2 ID (non-destructive)
+ * ====================================================================*/
+uint32_t uwb_check_id(void)
+{
+    static uint8_t spi_ready;
+    if (!spi_ready) { UWB_SPI_Init(); spi_ready = 1; }
+    Active_UWB = 2;
+    port_set_dw_ic_spi_slowrate();
+    uint32_t id = dwt_readdevid();
+    port_set_dw_ic_spi_fastrate();
+    return id;
+}
+
+void uwb_print_id(void)
+{
+    Active_UWB = 2;
+    reset_DWIC();
+    delay_1ms(15);
+    port_set_dw_ic_spi_slowrate();
+    uint32_t id = dwt_readdevid();
+    port_set_dw_ic_spi_fastrate();
+    printf("[UWB] ID2=0x%08lX\r\n", (unsigned long)id);
+}
+
