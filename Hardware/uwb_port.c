@@ -9,7 +9,7 @@
 
 uint8_t Active_UWB = 1;
 static port_dwic_isr_t s_dwic_isr = NULL;
-static uint32_t bb_nop = 2;   /* fast = 2, slow = 12 */
+static uint32_t bb_nop = 2;   /* fast=2 (~13MHz), slow=200 (~130kHz) */
 
 /* ------------------------------------------------------------------ */
 static void bb_delay(void)
@@ -85,8 +85,8 @@ void UWB_SPI_Init(void)
 /* ====================================================================
  *  SPI speed
  * ====================================================================*/
-void port_set_dw_ic_spi_slowrate(void) { bb_nop = 12; }
-void port_set_dw_ic_spi_fastrate(void) { bb_nop = 2;  }
+void port_set_dw_ic_spi_slowrate(void) { bb_nop = 200; } /* ~130kHz — long wires */
+void port_set_dw_ic_spi_fastrate(void) { bb_nop = 2;   } /* ~13MHz — short wires */
 
 /* ====================================================================
  *  reset_DWIC()
