@@ -28,7 +28,7 @@
 #define ESP8266_ONENET_INFO  "AT+CIPSTART=\"TCP\",\"mqtts.heclouds.com\",1883\r\n"
 
 /* ── 调试开关 ── */
-//#define UWB_CSV_OUTPUT      /* 取消注释 = 串口输出 CIR CSV (Python 采集用) */
+#define UWB_CSV_OUTPUT      /* 取消注释 = 串口输出 CIR CSV (Python 采集用) */
 
 /* ====================================================================
  *  Mode switch
@@ -183,7 +183,7 @@ static void mode_radar(void)
         if (uwb_radar_init() != UWB_OK) { printf("[RADAR] Init FAIL\r\n"); return; }
         rad_inited = 1;
 #ifdef UWB_CSV_OUTPUT
-        uwb_radar_csv(NULL);
+        uwb_radar_csv(NULL);               /* CSV 模式: 打印 header */
 #endif
         printf("[RADAR] Bistatic radar running...\r\n");
     }
@@ -194,35 +194,28 @@ static void mode_radar(void)
         rad_seq++;
 
 #ifdef UWB_CSV_OUTPUT
+        /* ── CSV 采集模式: 只输出 CIR 原始数据, 不做 ML ── */
         uwb_radar_csv(&res);
-#endif
-
-        /* ── ML 推理: 空车(0) vs 有人(1) ── */
-        float prob;
-        int   human = ml_predict(&res, &prob);
-
+#else
+        /* ── 检测模式: ML 推理 + 串口打印, 不输出 CSV ── */
         {
+            float prob;
+            int   human = ml_predict(&res, &prob);
             static int last_state = -1;
             static uint16_t tick;
 
-            /* 状态变化 → CAN 上报 */
             if (human != last_state) {
                 last_state = human;
                 can_diag_send_radar(human, (uint8_t)(prob * 100.0f));
             }
 
-            /* 每 1 秒打印一次当前状态 (4 帧 × 250ms) */
             if (++tick >= 4) {
                 tick = 0;
                 printf("[DETECT] %s  p=%.2f\r\n",
                        human ? "HUMAN" : "EMPTY", prob);
             }
         }
-    } else {
-#ifndef UWB_CSV_OUTPUT
-        /* 非 CSV 模式不打印超时点 — 保持终端干净 */
 #endif
-        ;
     }
 }
 
