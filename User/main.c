@@ -25,8 +25,8 @@
 
 #include <stdio.h>
 
-/* ── 调试开关 ── */
-#define UWB_CSV_OUTPUT      /* 取消注释 = 串口输出 CIR CSV (Python 采集用) */
+///* ── 调试开关 ── */
+//#define UWB_CSV_OUTPUT      /* 取消注释 = 串口输出 CIR CSV (Python 采集用) */
 
 /* ====================================================================
  *  Mode switch
@@ -185,7 +185,8 @@ static void mode_radar(void)
                 can_diag_send_radar(human, (uint8_t)(prob * 100.0f));
             }
 
-            if (++tick >= 4) {
+            /* 16 帧(4s)刷新一次 — 和模型窗口对齐 */
+            if (++tick >= 16) {
                 tick = 0;
                 printf("[DETECT] %s  p=%.2f\r\n",
                        human ? "HUMAN" : "EMPTY", prob);
