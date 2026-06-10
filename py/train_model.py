@@ -1,9 +1,13 @@
 """
 train_model.py — 16帧(4s)窗口逻辑回归: 空车 vs 有人
 
-25维特征 = WINDOW均值(4) + bin幅值均值(7) + bin幅值标准差(7) + bin相位循环方差(7)
+22维特征 (无 bin 幅值均值 — 抗信号幅值漂移):
+  f[0..3]:   4 全局均值  {fp_power, noise, mag_mean, mag_std}
+  f[4..7]:   4 全局标准差
+  f[8..14]:  7 bin 幅值标准差
+  f[15..21]: 7 bin 相位循环方差
 
-Usage: python train_model.py <empty.csv> <human1.csv> [human2.csv ...]
+Usage: python train_model.py <empty.csv> <human.csv>
 """
 
 import sys, csv, os
@@ -15,7 +19,7 @@ from sklearn.metrics import accuracy_score, recall_score, confusion_matrix
 
 WINDOW = 16
 BINS = [2, 8, 25, 31, 63, 69, 103]
-NF = 4 + len(BINS) * 3
+NF = 4 + 4 + len(BINS) + len(BINS)   # = 22
 
 def load_raw(fp):
     rows = []
@@ -26,7 +30,7 @@ def load_raw(fp):
                 if len(vals) >= 7: rows.append(vals[1:])
     data = np.array(rows, dtype=np.float64)
     nb = max(4, (data.shape[1] - 5) // 2)
-    raw = np.zeros((data.shape[0], len(BINS)*2 + 4), dtype=np.float32)
+    raw = np.zeros((data.shape[0], 4 + len(BINS)*2), dtype=np.float32)
     raw[:, 0] = data[:, 3]; raw[:, 1] = data[:, 4]
     for i in range(data.shape[0]):
         mg = np.sqrt(data[i, 5::2]**2 + data[i, 6::2]**2)[:nb]
@@ -38,24 +42,32 @@ def load_raw(fp):
     return raw
 
 def windowify(raw):
-    n, rfeat = raw.shape
+    n = raw.shape[0]
     windows = []
     for i in range(0, n - WINDOW + 1, WINDOW):
         w = raw[i:i+WINDOW, :]
         f = np.zeros(NF, dtype=np.float32)
-        for k in range(4): f[k] = np.mean(w[:, k])
-        for k in range(len(BINS)): f[4+k] = np.mean(w[:, 4+k])
-        for k in range(len(BINS)): f[11+k] = np.std(w[:, 4+k])
+        off = 0
+        # 4 全局均值
+        for k in range(4): f[off+k] = np.mean(w[:, k])
+        off += 4
+        # 4 全局标准差
+        for k in range(4): f[off+k] = np.std(w[:, k])
+        off += 4
+        # 7 bin 幅值标准差
+        for k in range(len(BINS)): f[off+k] = np.std(w[:, 4+k])
+        off += len(BINS)
+        # 7 bin 相位循环方差
         for k in range(len(BINS)):
             ph = w[:, 4+len(BINS)+k]
             mc, ms = np.mean(np.cos(ph)), np.mean(np.sin(ph))
-            f[18+k] = 1.0 - np.sqrt(mc**2 + ms**2)
+            f[off+k] = 1.0 - np.sqrt(mc**2 + ms**2)
         windows.append(f)
     return np.array(windows, dtype=np.float32)
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python train_model.py <empty.csv> <human1.csv> [human2.csv ...]")
+        print("Usage: python train_model.py <empty.csv> <human.csv>")
         sys.exit(1)
 
     all_w, all_y = [], []
@@ -72,16 +84,16 @@ def main():
     Xtr, Xte, ytr, yte = train_test_split(Xs, y, test_size=0.2, random_state=42, stratify=y)
     m = LogisticRegression(C=1.0, max_iter=2000, solver='lbfgs')
     m.fit(Xtr, ytr); yp = m.predict(Xte)
-    print(f"\n  W={WINDOW} ({WINDOW/4:.0f}s)  NF={NF}  Accuracy={accuracy_score(yte,yp)*100:.1f}%  Recall={recall_score(yte,yp,pos_label=1)*100:.1f}%")
+    print(f"\n  W={WINDOW} ({WINDOW/4:.0f}s)  NF={NF}  Acc={accuracy_score(yte,yp)*100:.1f}%  Rec={recall_score(yte,yp,pos_label=1)*100:.1f}%")
     cm = confusion_matrix(yte, yp)
-    print(f"  FP(empty→human)={cm[0,1]}  FN(human→empty)={cm[1,0]}")
+    print(f"  FP(empty->human)={cm[0,1]}  FN(human->empty)={cm[1,0]}")
 
     W, b = m.coef_.flatten(), m.intercept_[0]
     mu, sg = sc.mean_, sc.scale_
 
     out = os.path.join(os.path.dirname(__file__) or '.', 'model_weights.h')
     with open(out, 'w') as f:
-        f.write(f"/* Non-overlap window LR, W={WINDOW} frames ({WINDOW/4:.0f}s), NF={NF} */\n")
+        f.write(f"/* Window LR, W={WINDOW}fr ({WINDOW/4:.0f}s), NF={NF} (no bin means) */\n")
         f.write(f"#define ML_WINDOW_SIZE {WINDOW}\n#define ML_N_FEAT {NF}\n#define ML_N_BINS {len(BINS)}\n")
         f.write(f"static const int ml_bins[{len(BINS)}] = {{")
         f.write(','.join(str(b) for b in BINS)+'};\n\n')
