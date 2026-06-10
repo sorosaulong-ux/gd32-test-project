@@ -127,18 +127,6 @@ int ml_predict(const uwb_radar_result_t *res, float *prob_out)
 
         s_last_prob = sigmoid(z);
         s_last_result = (s_last_prob > 0.5f) ? 1 : 0;
-
-        /* DEBUG: 看特征值是否正常 */
-        {
-            static int dbg_cnt;
-            if (++dbg_cnt <= 3) {
-                printf("[ML-DBG] z=%.2f  wf[0]=%.1f wf[2]=%.1f wf[4]=%.1f wf[5]=%.1f\r\n",
-                       z, wf[0], wf[2], wf[4], wf[5]);
-                printf("[ML-DBG] mu[0]=%.1f mu[2]=%.1f mu[4]=%.1f mu[5]=%.1f\r\n",
-                       ml_mu[0], ml_mu[2], ml_mu[4], ml_mu[5]);
-            }
-        }
-
         s_buf_idx = 0;
     }
 
