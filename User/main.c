@@ -178,16 +178,17 @@ static void mode_radar(void)
             float prob;
             int   human = ml_predict(&res, &prob);
             static int last_state = -1;
-            static uint16_t tick;
+            static uint32_t last_print_ms;
 
             if (human != last_state) {
                 last_state = human;
                 can_diag_send_radar(human, (uint8_t)(prob * 100.0f));
             }
 
-            /* 16 帧(4s)刷新一次 — 和模型窗口对齐 */
-            if (++tick >= 16) {
-                tick = 0;
+            /* 状态变化或每 4s 打印一次 */
+            uint32_t now = uwb_tick_get();
+            if ((int32_t)(now - last_print_ms) >= 4000) {
+                last_print_ms = now;
                 printf("[DETECT] %s  p=%.2f\r\n",
                        human ? "HUMAN" : "EMPTY", prob);
             }
