@@ -142,8 +142,16 @@ int uwb_radar_scan(uwb_radar_result_t *res, uint32_t seq, const char *label)
 
     if (!(status & SYS_STATUS_RXFCG_BIT_MASK)) {
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO);
-        printf("[DBG] seq=%lu status=0x%08lX (no RXFCG)\r\n",
-               (unsigned long)seq, (unsigned long)status);
+        /* 限速: 每2秒最多打印一次错误 */
+        {
+            static uint32_t last_err_ms;
+            uint32_t now = uwb_tick_get();
+            if ((now - last_err_ms) >= 2000) {
+                last_err_ms = now;
+                printf("[DBG] seq=%lu status=0x%08lX (no RXFCG)\r\n",
+                       (unsigned long)seq, (unsigned long)status);
+            }
+        }
         return UWB_ERR_TIMEOUT;
     }
 
