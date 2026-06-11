@@ -52,6 +52,8 @@ int main(void)
     OLED_ShowString(3, 1, "Error:  NONE");
     OLED_ShowString(4, 1, "BUZZER: OFF");
     
+    UsartPrintf(USART_DEBUG, "Entering main loop...\r\n");
+    
     while(1)
     {
         /* ── CAN 接收 ── */
@@ -133,6 +135,18 @@ int main(void)
         }
         
         oled_inited = 1;
+        
+        /* ── 心跳: 每2秒打印一次 ── */
+        {
+            static uint16_t hb_cnt;
+            if(++hb_cnt >= 40)
+            {
+                hb_cnt = 0;
+                UsartPrintf(USART_DEBUG, "[HB] alive, CAN=%d fault=%d\r\n", g_can_ok, g_fault);
+            }
+        }
+        
+        DelayMs(50);
     }
 }
 
