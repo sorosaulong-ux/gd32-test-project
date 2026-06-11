@@ -31,7 +31,7 @@ static uint8_t g_can_ok = 0;  /* CAN连接状态 */
 static uint8_t g_buzzer_src = 0;  /* 蜂鸣器来源: 0=本地, 1=远程 */
 
 void Hardware_Init(void);
-static const char* get_error_text(uint8_t err, uint8_t sub)
+static const char* get_error_text(uint8_t err, uint8_t sub);
 
 int main(void)
 {
