@@ -343,21 +343,30 @@ void OneNet_RevPro(unsigned char *cmd)
                         /* CarLock */
                         lock_json = cJSON_GetObjectItem(params_json, "CarLock");
                         if (lock_json != NULL) {
-                            g_car_lock = (lock_json->type == cJSON_True || lock_json->valueint == 1) ? 1 : 0;
+                            if (lock_json->type == cJSON_True || lock_json->type == cJSON_False)
+                                g_car_lock = (lock_json->type == cJSON_True) ? 1 : 0;
+                            else
+                                g_car_lock = (lock_json->valueint == 1) ? 1 : 0;
                             UsartPrintf(USART_DEBUG, "[3] CarLock = %d\r\n", g_car_lock);
                         }
 
                         /* Brake */
                         brake_json = cJSON_GetObjectItem(params_json, "Brake");
                         if (brake_json != NULL) {
-                            g_brake = (brake_json->type == cJSON_True || brake_json->valueint == 1) ? 1 : 0;
+                            if (brake_json->type == cJSON_True || brake_json->type == cJSON_False)
+                                g_brake = (brake_json->type == cJSON_True) ? 1 : 0;
+                            else
+                                g_brake = (brake_json->valueint == 1) ? 1 : 0;
                             UsartPrintf(USART_DEBUG, "[3] Brake = %d\r\n", g_brake);
                         }
 
                         /* ParkingBrake */
                         park_json = cJSON_GetObjectItem(params_json, "ParkingBrake");
                         if (park_json != NULL) {
-                            g_parking_brake = (park_json->type == cJSON_True || park_json->valueint == 1) ? 1 : 0;
+                            if (park_json->type == cJSON_True || park_json->type == cJSON_False)
+                                g_parking_brake = (park_json->type == cJSON_True) ? 1 : 0;
+                            else
+                                g_parking_brake = (park_json->valueint == 1) ? 1 : 0;
                             UsartPrintf(USART_DEBUG, "[3] ParkingBrake = %d\r\n", g_parking_brake);
                         }
                     }
