@@ -39,10 +39,13 @@ int main(void)
     uint32_t rx_id;
     uint8_t last_fault = 255;
     uint8_t last_buzzer = 255;
+    uint8_t last_can_ok = 255;
     uint16_t can_timeout = 0;
+    uint8_t oled_inited = 0;
     
     Hardware_Init();
     
+    /* ── 初始化OLED ── */
     OLED_Clear();
     OLED_ShowString(1, 1, "CAN: Waiting");
     OLED_ShowString(2, 1, "System: NORMAL");
@@ -55,7 +58,12 @@ int main(void)
         if(CAN_Receive_Msg(&rx_id, rx_data) == 0)
         {
             can_timeout = 0;
-            g_can_ok = 1;
+            
+            if(!g_can_ok)
+            {
+                g_can_ok = 1;
+                OLED_ShowString(1, 1, "CAN: OK     ");
+            }
             
             if(rx_id == CAN_ID_ERROR)
             {
@@ -83,8 +91,6 @@ int main(void)
             }
             else if(rx_id == CAN_ID_BUZZER)
             {
-                /* 远程蜂鸣器控制 */
-                g_buzzer_src = 1;
                 BUZZER_Set(rx_data[0] ? BUZZER_ON : BUZZER_OFF);
                 UsartPrintf(USART_DEBUG, "[CAN] 0x105 Buzzer=%d\r\n", rx_data[0]);
             }
@@ -93,41 +99,40 @@ int main(void)
         /* ── CAN 超时检测 (5秒无数据) ── */
         if(++can_timeout >= 100)
         {
-            g_can_ok = 0;
+            if(g_can_ok)
+            {
+                g_can_ok = 0;
+                OLED_ShowString(1, 1, "CAN: Waiting");
+            }
             can_timeout = 100;
         }
         
-        /* ── OLED 更新 ── */
+        /* ── OLED 逐行更新 (只在变化时刷新) ── */
+        char buf[20];
+        
+        /* 第2行: 系统状态 */
+        if(g_fault != last_fault)
         {
-            uint8_t need_update = 0;
-            char buf[20];
-            
-            if(g_fault != last_fault || BUZZER_Status != last_buzzer || g_can_ok == 0)
-            {
-                need_update = 1;
-                last_fault = g_fault;
-                last_buzzer = BUZZER_Status;
-            }
-            
-            if(need_update)
-            {
-                OLED_Clear();
-                
-                /* 第1行: CAN连接状态 */
-                OLED_ShowString(1, 1, g_can_ok ? "CAN: OK" : "CAN: Waiting");
-                
-                /* 第2行: 系统状态 */
-                OLED_ShowString(2, 1, g_fault ? "System: FAULT!" : "System: NORMAL");
-                
-                /* 第3行: 错误类型 */
-                snprintf(buf, sizeof(buf), "Error: %s", get_error_text(g_err_code, g_err_sub));
-                OLED_ShowString(3, 1, buf);
-                
-                /* 第4行: 蜂鸣器状态 */
-                snprintf(buf, sizeof(buf), "BUZZER: %s", BUZZER_Status == BUZZER_ON ? "ON " : "OFF");
-                OLED_ShowString(4, 1, buf);
-            }
+            OLED_ShowString(2, 1, g_fault ? "System: FAULT!" : "System: NORMAL");
+            last_fault = g_fault;
         }
+        
+        /* 第3行: 错误类型 */
+        if(g_fault || oled_inited == 0)
+        {
+            snprintf(buf, sizeof(buf), "Error: %-10s", get_error_text(g_err_code, g_err_sub));
+            OLED_ShowString(3, 1, buf);
+        }
+        
+        /* 第4行: 蜂鸣器状态 */
+        if(BUZZER_Status != last_buzzer)
+        {
+            snprintf(buf, sizeof(buf), "BUZZER: %s", BUZZER_Status == BUZZER_ON ? "ON " : "OFF");
+            OLED_ShowString(4, 1, buf);
+            last_buzzer = BUZZER_Status;
+        }
+        
+        oled_inited = 1;
     }
 }
 
