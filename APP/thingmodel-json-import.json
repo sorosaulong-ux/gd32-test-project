@@ -1,0 +1,119 @@
+{
+  "properties": [
+    {
+      "identifier": "Buzzer",
+      "name": "蜂鸣器",
+      "functionType": "u",
+      "accessMode": "rw",
+      "desc": "蜂鸣器开关控制",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "开启",
+          "false": "关闭"
+        }
+      }
+    },
+    {
+      "identifier": "SystemStatus",
+      "name": "系统状态",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "系统错误码，0=正常",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": "0",
+          "max": "255",
+          "unit": "",
+          "step": "1"
+        }
+      }
+    },
+    {
+      "identifier": "CarLock",
+      "name": "车锁",
+      "functionType": "u",
+      "accessMode": "rw",
+      "desc": "车锁开关控制",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "开锁",
+          "false": "关锁"
+        }
+      }
+    },
+    {
+      "identifier": "Distance",
+      "name": "车钥匙距离",
+      "functionType": "u",
+      "accessMode": "r",
+      "desc": "车钥匙与车辆的距离",
+      "dataType": {
+        "type": "float",
+        "specs": {
+          "min": "0",
+          "max": "100",
+          "unit": "m",
+          "step": "0.1"
+        }
+      }
+    },
+    {
+      "identifier": "Brake",
+      "name": "刹车",
+      "functionType": "u",
+      "accessMode": "rw",
+      "desc": "刹车模拟按键",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "踩下",
+          "false": "松开"
+        }
+      }
+    },
+    {
+      "identifier": "ParkingBrake",
+      "name": "手刹",
+      "functionType": "u",
+      "accessMode": "rw",
+      "desc": "手刹模拟按键",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "true": "拉上",
+          "false": "放下"
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "identifier": "Error",
+      "name": "故障上报",
+      "desc": "系统故障事件上报",
+      "outputData": [
+        {
+          "identifier": "ErrorCode",
+          "name": "故障代码",
+          "dataType": {
+            "type": "enum",
+            "specs": {
+              "0": "正常",
+              "1": "UWB异常",
+              "2": "WiFi断连",
+              "3": "CAN故障",
+              "4": "启动完成",
+              "5": "MQTT断连"
+            }
+          }
+        }
+      ],
+      "functionType": "u",
+      "eventType": "info"
+    }
+  ],
+  "services": []
+}
