@@ -10,6 +10,7 @@
 #include "can_drive.h"  
 
 #include <string.h>
+#include <stdio.h>
 
 /* ── CAN ID (与 GD32A7 一致) ── */
 #define CAN_ID_ERROR    0x103U
