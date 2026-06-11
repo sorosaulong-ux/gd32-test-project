@@ -98,3 +98,21 @@ void can_diag_send_radar(uint8_t detected, uint8_t confidence)
         s_err_cnt++;
     }
 }
+
+/* ====================================================================
+ *  can_diag_send_vehicle_cmd — 车辆启动/熄灭, ID 0x104
+ *  byte[0] = cmd (1=START, 2=STOP)
+ *  byte[1..3] = 0x00
+ * ====================================================================*/
+void can_diag_send_vehicle_cmd(uint8_t cmd)
+{
+    uint8_t data[4] = {cmd, 0x00, 0x00, 0x00};
+
+    if (SUCCESS == can_send_std_frame(DTM_CAN2, CAN_ID_VEHICLE, data, 4)) {
+        s_tx_cnt++;
+        printf("[CAN] 0x104 vehicle cmd=%d %s\r\n", cmd,
+               cmd == VEHICLE_CMD_START ? "START" : "STOP");
+    } else {
+        s_err_cnt++;
+    }
+}

@@ -32,7 +32,14 @@
  *  Mode switch
  * ====================================================================*/
 typedef enum { MODE_RANGING, MODE_RADAR } sys_mode_t;
-static sys_mode_t g_mode = MODE_RADAR;   /* 默认雷达(ML检测) */
+static sys_mode_t g_mode = MODE_RADAR;
+
+/* ── 车辆控制状态 ── */
+uint8_t  g_car_lock = 0;        /* 车锁: 0=关, 1=开 */
+uint8_t  g_brake = 0;           /* 刹车: 0=松开, 1=踩下 */
+uint8_t  g_parking_brake = 0;   /* 手刹: 0=放下, 1=拉上 */
+uint8_t  g_system_status = 0;   /* 系统状态: 0=正常 */
+float    g_key_distance = 99.0f;/* 车钥匙距离(m) */
 
 /* ====================================================================
  *  KEY2 (GPIOL.3) — 模式切换 (长按500ms)
@@ -79,6 +86,8 @@ static void system_init(void)
     uart_init();
     key1_init();
     key2_init();
+    key3_init();  /* 刹车按键 PL4 */
+    key4_init();  /* 手刹按键 PL5 */
 
     printf("\r\n=== GD32A7 Vehicle Terminal ===\r\n\r\n");
 }
@@ -111,15 +120,22 @@ static void health_check(void)
     uint8_t  uwb_ok = (id == 0xDECA0302U || id == 0xDECA0312U);
     if (!uwb_ok && last_uwb_ok) {
         can_diag_send_error(CAN_ERR_UWB, CAN_ERR_UWB_ID);
+        g_system_status = 1;  /* UWB异常 */
         printf("[SYS] !! UWB2 ID: 0x%08lX\r\n", (unsigned long)id);
     }
     if (uwb_ok && !last_uwb_ok) {
         can_diag_send_error(0, 0);
+        g_system_status = 0;  /* 恢复正常 */
         printf("[SYS] OK UWB2 restored\r\n");
     }
     last_uwb_ok = uwb_ok;
 
-    /* WiFi 错误由 esp8266.c 状态机自动上报 (WIFI_SM_DEAD → CAN_ERR_ESP_WIFI) */
+    /* ── WiFi 状态同步 ── */
+    if (!wifi_sm_ready()) {
+        g_system_status = 2;  /* WiFi断连 */
+    } else if (g_system_status == 2) {
+        g_system_status = 0;  /* WiFi恢复 */
+    }
 }
 
 /* ====================================================================
@@ -143,6 +159,21 @@ static void mode_ranging(void)
         gd_eval_led_toggle(LED2);
         printf("[%lu] dist=%.3f m\r\n", (unsigned long)rng_cnt, dist);
         can_diag_send_ranging((float)dist);
+
+        /* ── 更新车钥匙距离 ── */
+        g_key_distance = (float)dist;
+
+        /* ── 距离<2.5m 自动开锁 ── */
+        if (g_key_distance < 2.5f && !g_car_lock) {
+            g_car_lock = 1;
+            printf("[LOGIC] Auto UNLOCK (dist=%.1f < 2.5m)\r\n", (double)g_key_distance);
+        }
+
+        /* ── 手刹+距离>5m → 熄灭 ── */
+        if (g_parking_brake && g_key_distance > 5.0f) {
+            can_diag_send_vehicle_cmd(VEHICLE_CMD_STOP);
+            printf("[LOGIC] STOP: parking brake + dist>5m\r\n");
+        }
     }
 }
 
@@ -219,6 +250,14 @@ static void main_loop(void)
         /* ── 按键 ── */
         key1_poll();
         key2_poll();
+        key3_poll();  /* 刹车 */
+        key4_poll();  /* 手刹 */
+
+        /* ── 车锁+刹车 → 启动 ── */
+        if (g_car_lock && key3_pressed()) {
+            can_diag_send_vehicle_cmd(VEHICLE_CMD_START);
+            printf("[LOGIC] START: car lock + brake\r\n");
+        }
 
         /* ── 当前模式 ── */
         if (g_mode == MODE_RANGING) mode_ranging(); else mode_radar();

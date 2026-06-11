@@ -21,7 +21,8 @@
 // hardware
 #include "usart_esp.h"
 #include "delay.h"
-#include "buzzer.h"   
+#include "buzzer.h"
+#include "key.h"
 
 //C��
 #include <string.h>
@@ -40,6 +41,13 @@ char key[48];
  
 // ���õײ�� ESP8266 ���ջ�����
 extern unsigned char esp8266_buf[512];
+
+/* ── 外部变量: 来自 main.c ── */
+extern uint8_t  g_car_lock;
+extern uint8_t  g_brake;
+extern uint8_t  g_parking_brake;
+extern uint8_t  g_system_status;
+extern float    g_key_distance;
 
 /*
 ************************************************************
@@ -175,16 +183,39 @@ unsigned char OneNet_FillBuf(char *buf)
 {
 	char text[64];
 
-    // 1. ƴ�� JSON ͷ�� (id �������⣬ͨ��������Ϣ׷��)
-	memset(text, 0, sizeof(text));
+	memset(buf, 0, 256);
 	strcpy(buf, "{\"id\":\"123\",\"version\":\"1.0\",\"params\":{");
 	
-    // 2. ƴ�Ӿ��������ֵ (Buzzer ���ƶ˶���ı�ʶ��)
+	/* Buzzer */
 	memset(text, 0, sizeof(text));
 	sprintf(text, "\"Buzzer\":{\"value\":%s}", BUZZER_Status == BUZZER_ON ? "true" : "false");
 	strcat(buf, text);
 	
-    // 3. ƴ�� JSON β��
+	/* SystemStatus */
+	memset(text, 0, sizeof(text));
+	sprintf(text, ",\"SystemStatus\":{\"value\":%d}", g_system_status);
+	strcat(buf, text);
+
+	/* CarLock */
+	memset(text, 0, sizeof(text));
+	sprintf(text, ",\"CarLock\":{\"value\":%s}", g_car_lock ? "true" : "false");
+	strcat(buf, text);
+
+	/* Brake */
+	memset(text, 0, sizeof(text));
+	sprintf(text, ",\"Brake\":{\"value\":%s}", g_brake ? "true" : "false");
+	strcat(buf, text);
+
+	/* ParkingBrake */
+	memset(text, 0, sizeof(text));
+	sprintf(text, ",\"ParkingBrake\":{\"value\":%s}", g_parking_brake ? "true" : "false");
+	strcat(buf, text);
+
+	/* Distance */
+	memset(text, 0, sizeof(text));
+	sprintf(text, ",\"Distance\":{\"value\":%.1f}", (double)g_key_distance);
+	strcat(buf, text);
+	
 	strcat(buf, "}}");
 	return strlen(buf);
 }
@@ -259,6 +290,7 @@ void OneNet_RevPro(unsigned char *cmd)
 	short result = 0;
 
 	cJSON *raw_json, *params_json, *buzzer_json, *id_json;
+	cJSON *lock_json, *brake_json, *park_json;
 	char msg_id[32] = {0}; 
 	char reply_topic[128];
 	char reply_payload[128];
@@ -300,13 +332,33 @@ void OneNet_RevPro(unsigned char *cmd)
                         buzzer_json = cJSON_GetObjectItem(params_json, "Buzzer");
                         if(buzzer_json != NULL)
                         {
-                            // ���ݶ�����ֵ���͵Ĳ����ж�
                             if(buzzer_json->type == cJSON_True || buzzer_json->type == 1 || buzzer_json->type == 2 || buzzer_json->valueint == 1) 
                                 BUZZER_Set(BUZZER_ON);   
                             else 
                                 BUZZER_Set(BUZZER_OFF);  
                             
                             UsartPrintf(USART_DEBUG, "[3] BUZZER Action Executed!\r\n");
+                        }
+
+                        /* CarLock */
+                        lock_json = cJSON_GetObjectItem(params_json, "CarLock");
+                        if (lock_json != NULL) {
+                            g_car_lock = (lock_json->type == cJSON_True || lock_json->valueint == 1) ? 1 : 0;
+                            UsartPrintf(USART_DEBUG, "[3] CarLock = %d\r\n", g_car_lock);
+                        }
+
+                        /* Brake */
+                        brake_json = cJSON_GetObjectItem(params_json, "Brake");
+                        if (brake_json != NULL) {
+                            g_brake = (brake_json->type == cJSON_True || brake_json->valueint == 1) ? 1 : 0;
+                            UsartPrintf(USART_DEBUG, "[3] Brake = %d\r\n", g_brake);
+                        }
+
+                        /* ParkingBrake */
+                        park_json = cJSON_GetObjectItem(params_json, "ParkingBrake");
+                        if (park_json != NULL) {
+                            g_parking_brake = (park_json->type == cJSON_True || park_json->valueint == 1) ? 1 : 0;
+                            UsartPrintf(USART_DEBUG, "[3] ParkingBrake = %d\r\n", g_parking_brake);
                         }
                     }
                     
