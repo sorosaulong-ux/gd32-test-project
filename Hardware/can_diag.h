@@ -23,6 +23,7 @@ extern "C" {
 #define CAN_ID_RADAR        0x102U   /* radar detection */
 #define CAN_ID_ERROR        0x103U
 #define CAN_ID_VEHICLE      0x104U   /* 车辆启动/熄灭 */
+#define CAN_ID_BUZZER       0x105U   /* 蜂鸣器状态 */
 
 /* ====================================================================
  *  0x103 System Error — 状态变化时发送
@@ -67,6 +68,7 @@ void can_diag_send_error(uint8_t err_code, uint8_t sub_code);
 void can_diag_send_ranging(float distance_m);
 void can_diag_send_radar(uint8_t detected, uint8_t confidence);
 void can_diag_send_vehicle_cmd(uint8_t cmd);
+void can_diag_send_buzzer(uint8_t on);
 
 #ifdef __cplusplus
 }

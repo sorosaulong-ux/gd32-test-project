@@ -234,6 +234,7 @@ static void mode_radar(void)
 static void main_loop(void)
 {
     unsigned short tick_5s = 0;
+    static uint8_t last_buzzer = 0xFF;
 
     while (1) {
         /* ── WiFi 状态机 (非阻塞, <1ms) ── */
@@ -252,6 +253,12 @@ static void main_loop(void)
         key2_poll();
         key3_poll();  /* 刹车 */
         key4_poll();  /* 手刹 */
+
+        /* ── 蜂鸣器状态变化 → CAN 同步到 GD32F3 ── */
+        if (BUZZER_Status != last_buzzer) {
+            can_diag_send_buzzer(BUZZER_Status);
+            last_buzzer = BUZZER_Status;
+        }
 
         /* ── 车锁+刹车 → 启动 ── */
         if (g_car_lock && key3_pressed()) {

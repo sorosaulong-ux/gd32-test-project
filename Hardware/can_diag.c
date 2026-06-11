@@ -116,3 +116,18 @@ void can_diag_send_vehicle_cmd(uint8_t cmd)
         s_err_cnt++;
     }
 }
+
+/* ====================================================================
+ *  can_diag_send_buzzer — 蜂鸣器状态, ID 0x105
+ *  byte[0] = 1=ON, 0=OFF
+ * ====================================================================*/
+void can_diag_send_buzzer(uint8_t on)
+{
+    uint8_t data[4] = {on, 0x00, 0x00, 0x00};
+
+    if (SUCCESS == can_send_std_frame(DTM_CAN2, CAN_ID_BUZZER, data, 4)) {
+        s_tx_cnt++;
+    } else {
+        s_err_cnt++;
+    }
+}
