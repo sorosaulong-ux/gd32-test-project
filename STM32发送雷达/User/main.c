@@ -141,6 +141,17 @@ static void key_main(void)
             dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
             dwt_wakeup_ic();
+            Delay_ms(10);
+            reset_DWIC(); Delay_ms(2);
+            while (!dwt_checkidlerc());
+            dwt_initialise(DWT_DW_INIT);
+            dwt_configure(&config);
+            { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
+            dwt_setrxantennadelay(RX_ANT_DLY);
+            dwt_settxantennadelay(TX_ANT_DLY);
+            dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
+            dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
+            dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
             OLED_ShowString(4, 1, "BLE ON, UWB Resume ");
         }
 
@@ -266,6 +277,14 @@ static void radar_tx_main(void)
             dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
             dwt_wakeup_ic();
+            Delay_ms(10);
+            reset_DWIC(); Delay_ms(2);
+            while (!dwt_checkidlerc());
+            dwt_initialise(DWT_DW_INIT);
+            dwt_configure(&config);
+            { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
+            dwt_settxantennadelay(TX_ANT_DLY);
+            dwt_setlnapamode(DWT_PA_ENABLE);
             OLED_ShowString(4, 1, "BLE ON, TX Resume  ");
         }
 
