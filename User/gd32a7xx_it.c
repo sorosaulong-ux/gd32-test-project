@@ -124,22 +124,5 @@ void vApplicationTickHook(void)
     uwb_tick_inc();
 }
 
-/* ── FreeRTOS required hooks ── */
-void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
-{
-    (void)xTask; (void)pcTaskName;
-    while (1) {}
-}
-
-void vApplicationMallocFailedHook(void)
-{
-    while (1) {}
-}
-
-/* ── Global stubs (onenet.c references, will be wired up later) ── */
-int  g_system_status;
-int  g_car_lock;
-int  g_brake;
-int  g_parking_brake;
-float g_key_distance;
-int  g_ble_connected;
+/* ── FreeRTOS required hooks (impl in app_tasks.c) ── */
+/* ── Global variables (defined in app_tasks.c) ── */

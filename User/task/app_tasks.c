@@ -334,3 +334,47 @@ void app_tasks_init(void)
 
     printf("[SYS] All tasks created\r\n");
 }
+
+/* ====================================================================
+ *  can_diag_send_buzzer — CAN 0x105 蜂鸣器状态
+ * ====================================================================*/
+void can_diag_send_buzzer(uint8_t on)
+{
+    can_tx_msg_t msg;
+    msg.id = 0x105U;
+    msg.len = 4;
+    msg.data[0] = on;
+    msg.data[1] = 0x00;
+    msg.data[2] = 0x00;
+    msg.data[3] = 0x00;
+    xQueueSend(xCanTxQueue, &msg, 0);
+}
+
+/* ====================================================================
+ *  can_diag_send_vehicle_cmd — CAN 0x104 车辆控制命令
+ * ====================================================================*/
+void can_diag_send_vehicle_cmd(uint8_t cmd)
+{
+    can_tx_msg_t msg;
+    msg.id = 0x104U;
+    msg.len = 4;
+    msg.data[0] = cmd;
+    msg.data[1] = 0x00;
+    msg.data[2] = 0x00;
+    msg.data[3] = 0x00;
+    xQueueSend(xCanTxQueue, &msg, 0);
+}
+
+/* ====================================================================
+ *  FreeRTOS required hooks
+ * ====================================================================*/
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+    (void)xTask; (void)pcTaskName;
+    while (1) {}
+}
+
+void vApplicationMallocFailedHook(void)
+{
+    while (1) {}
+}
