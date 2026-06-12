@@ -340,7 +340,7 @@
               <MiscControls>-Wassign-enum</MiscControls>
               <Define>GD32A711X_A712X,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User;.\DW3000;.\py;.\NET\MQTT;.\NET\onenet\inc;.\NET\CJSON;.\FreeRTOS;.\FreeRTOS\Source\include;.\FreeRTOS\Source\portable\RVDS\ARM_CM7\r0p1</IncludePath>
+              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User;.\DW3000;.\py;.\NET\MQTT;.\NET\onenet\inc;.\NET\CJSON;.\FreeRTOS;.\FreeRTOS\Source\include;.\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -622,7 +622,7 @@
             <File>
               <FileName>port.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\FreeRTOS\Source\portable\RVDS\ARM_CM7\r0p1\port.c</FilePath>
+              <FilePath>.\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1\port.c</FilePath>
             </File>
             <File>
               <FileName>heap_4.c</FileName>

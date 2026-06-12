@@ -37,6 +37,7 @@ OF SUCH DAMAGE.
 #include "task.h"
 #include "systick.h"
 #include "uwb_port.h"
+#include "buzzer.h"
 #include "key.h"
 
 /*!
