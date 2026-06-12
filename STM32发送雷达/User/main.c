@@ -101,27 +101,28 @@ static void key_main(void)
     uinit();
     up("\r\nSTM32 KEY v2.0\r\n");
     OLED_Init();
-    OLED_ShowString(1, 1, "KEY v2.0 (Init)");
+    OLED_ShowString(1, 1, "UWB: Init...");
+    OLED_ShowString(3, 1, "BLE: Init...");
 
     BLE_Init();
     up("BLE init OK\r\n");
 
-    OLED_ShowString(2, 1, "Waiting BLE...");
+    OLED_ShowString(3, 1, "BLE: Waiting..");
     while (!BLE_IsConnected()) {
-        OLED_ShowString(2, 1, "Waiting BLE...");
+        OLED_ShowString(3, 1, "BLE: Waiting..");
         Delay_ms(500);
     }
-    OLED_ShowString(2, 1, "BLE Connected! ");
+    OLED_ShowString(3, 1, "BLE: Connected ");
 
     UWB_Hardware_Init();
     reset_DWIC(); Delay_ms(2);
     while (!dwt_checkidlerc());
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
-        OLED_ShowString(2, 1, "INIT ERR"); up("INIT ERR\r\n"); while (1);
+        OLED_ShowString(1, 1, "UWB: INIT ERR "); up("INIT ERR\r\n"); while (1);
     }
     if (dwt_configure(&config)) {
-        OLED_ShowString(2, 1, "CFG ERR"); up("CFG ERR\r\n"); while (1);
+        OLED_ShowString(1, 1, "UWB: CFG ERR  "); up("CFG ERR\r\n"); while (1);
     }
 
     { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
@@ -132,12 +133,13 @@ static void key_main(void)
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
 
     id = dwt_readdevid();
-    { char b[16]; snprintf(b,16,"ID:%08lX",(unsigned long)id); OLED_ShowString(2,1,b); up(b); up("\r\n"); }
+    { char b[16]; snprintf(b,16,"UWB: %08lX",(unsigned long)id); OLED_ShowString(1,1,b); up(b); up("\r\n"); }
 
     while (1) {
         /* BLE 连接检查 */
         if (!BLE_IsConnected()) {
-            OLED_ShowString(4, 1, "BLE OFF, UWB Stopped");
+            OLED_ShowString(3, 1, "BLE: Disconn.  ");
+            OLED_ShowString(1, 1, "UWB: Stopped   ");
             dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
             dwt_wakeup_ic();
@@ -152,7 +154,9 @@ static void key_main(void)
             dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
             dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
             dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
-            OLED_ShowString(4, 1, "BLE ON, UWB Resume ");
+            OLED_ShowString(3, 1, "BLE: Connected ");
+            id = dwt_readdevid();
+            { char b[16]; snprintf(b,16,"UWB: %08lX",(unsigned long)id); OLED_ShowString(1,1,b); }
         }
 
         /* Poll */
@@ -170,7 +174,7 @@ static void key_main(void)
         if (!(status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
             dwt_write32bitreg(SYS_STATUS_ID,
                 SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
-            { char dbg[20]; snprintf(dbg,20,"TO:%08lX",(unsigned long)status_reg); OLED_ShowString(3,1,dbg); }
+            { char dbg[20]; snprintf(dbg,20,"UWB: TO %04lX",(unsigned long)(status_reg & 0xFFFF)); OLED_ShowString(1,1,dbg); }
             up("T"); goto next_key;
         }
 
@@ -206,14 +210,14 @@ static void key_main(void)
             ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
         }
 
-        OLED_ShowString(3, 1, "Resp: OK"); up("R");
+        OLED_ShowString(2, 1, "UWB: Resp OK  "); up("R");
         if (ret == DWT_SUCCESS) {
             while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK));
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
             frame_seq_nb++;
-            OLED_ShowString(4, 1, "Final: OK"); up("S\r\n");
+            OLED_ShowString(2, 1, "UWB: Final OK "); up("S\r\n");
         } else {
-            OLED_ShowString(4, 1, "Final: FAIL"); up("F\r\n");
+            OLED_ShowString(2, 1, "UWB: Final FAIL"); up("F\r\n");
         }
 
 next_key:
@@ -237,27 +241,28 @@ static void radar_tx_main(void)
     uinit();
     up("\r\nSTM32 RADAR TX v1.0\r\n");
     OLED_Init();
-    OLED_ShowString(1, 1, "RADAR TX v1.0");
+    OLED_ShowString(1, 1, "UWB: Init...");
+    OLED_ShowString(3, 1, "BLE: Init...");
 
     BLE_Init();
     up("BLE init OK\r\n");
 
-    OLED_ShowString(2, 1, "Waiting BLE...");
+    OLED_ShowString(3, 1, "BLE: Waiting..");
     while (!BLE_IsConnected()) {
-        OLED_ShowString(2, 1, "Waiting BLE...");
+        OLED_ShowString(3, 1, "BLE: Waiting..");
         Delay_ms(500);
     }
-    OLED_ShowString(2, 1, "BLE Connected! ");
+    OLED_ShowString(3, 1, "BLE: Connected ");
 
     UWB_Hardware_Init();
     reset_DWIC(); Delay_ms(2);
     while (!dwt_checkidlerc());
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
-        OLED_ShowString(2, 1, "INIT ERR"); while (1);
+        OLED_ShowString(1, 1, "UWB: INIT ERR "); while (1);
     }
     if (dwt_configure(&config)) {
-        OLED_ShowString(2, 1, "CFG ERR"); while (1);
+        OLED_ShowString(1, 1, "UWB: CFG ERR  "); while (1);
     }
 
     { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
@@ -265,15 +270,16 @@ static void radar_tx_main(void)
     dwt_setlnapamode(DWT_PA_ENABLE);
 
     id = dwt_readdevid();
-    { char b[16]; snprintf(b,16,"TX ID:%08lX",(unsigned long)id); OLED_ShowString(2,1,b); up(b); up("\r\n"); }
+    { char b[16]; snprintf(b,16,"UWB: %08lX",(unsigned long)id); OLED_ShowString(1,1,b); up(b); up("\r\n"); }
 
-    OLED_ShowString(3, 1, "Pulsing @ 4Hz");
+    OLED_ShowString(2, 1, "UWB: Pulsing  ");
     up("RADAR TX running\r\n");
 
     while (1) {
         /* BLE 连接检查 */
         if (!BLE_IsConnected()) {
-            OLED_ShowString(4, 1, "BLE OFF, TX Stopped");
+            OLED_ShowString(3, 1, "BLE: Disconn.  ");
+            OLED_ShowString(1, 1, "UWB: Stopped   ");
             dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
             dwt_wakeup_ic();
@@ -285,7 +291,10 @@ static void radar_tx_main(void)
             { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
             dwt_settxantennadelay(TX_ANT_DLY);
             dwt_setlnapamode(DWT_PA_ENABLE);
-            OLED_ShowString(4, 1, "BLE ON, TX Resume  ");
+            OLED_ShowString(3, 1, "BLE: Connected ");
+            id = dwt_readdevid();
+            { char b[16]; snprintf(b,16,"UWB: %08lX",(unsigned long)id); OLED_ShowString(1,1,b); }
+            OLED_ShowString(2, 1, "UWB: Pulsing  ");
         }
 
         tx_radar[2] = (uint8_t)(cnt & 0xFF);
@@ -298,7 +307,7 @@ static void radar_tx_main(void)
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
 
         cnt++;
-        { char b[16]; snprintf(b,16,"Pulse:%lu",(unsigned long)cnt); OLED_ShowString(4,1,b); }
+        { char b[16]; snprintf(b,16,"UWB: Pulse %lu",(unsigned long)cnt); OLED_ShowString(2,1,b); }
         Delay_ms(RADAR_TX_INTERVAL_MS);
     }
 }
