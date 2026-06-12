@@ -169,7 +169,6 @@ void Hardware_Init(void)
     nvic_priority_group_set(NVIC_PRIGROUP_PRE2_SUB2);
     Delay_Init();									
     Usart0_Init(115200);   		
-    Usart1_Init(115200);   			
     BUZZER_Init();      
     Key_Init();         
     OLED_Init();        
