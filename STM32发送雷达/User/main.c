@@ -138,9 +138,9 @@ static void key_main(void)
         /* BLE 连接检查 */
         if (!BLE_IsConnected()) {
             OLED_ShowString(4, 1, "BLE OFF, UWB Stopped");
-            dwt_entersleep(DWT_PRESLEEP);
+            dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
-            dwt_wakeup();
+            dwt_wakeup_ic();
             OLED_ShowString(4, 1, "BLE ON, UWB Resume ");
         }
 
@@ -263,9 +263,9 @@ static void radar_tx_main(void)
         /* BLE 连接检查 */
         if (!BLE_IsConnected()) {
             OLED_ShowString(4, 1, "BLE OFF, TX Stopped");
-            dwt_entersleep(DWT_PRESLEEP);
+            dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
-            dwt_wakeup();
+            dwt_wakeup_ic();
             OLED_ShowString(4, 1, "BLE ON, TX Resume  ");
         }
 
