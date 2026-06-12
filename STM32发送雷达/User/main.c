@@ -1,19 +1,65 @@
 /*!
  *  \file    main.c
- *  \brief   STM32F103 — EWM550 UWB 钥匙 (标签/Responder)
+ *  \brief   STM32F103 — UWB 钥匙测距 (DS-TWR Initiator)
  *           BLE 连接后启用 UWB，断开后休眠
  */
 
 #include "stm32f10x.h"
 #include "Delay.h"
 #include "OLED.h"
-#include "ewm550.h"
+#include "port.h"
 #include "ble.h"
+#include "deca_device_api.h"
+#include "deca_regs.h"
 #include <string.h>
 #include <stdio.h>
 
-/* ─── USART1 调试串口 (PA9, 115200) ─── */
-static void debug_init(void)
+/* ─── UWB 常量 ─── */
+#define UUS_TO_DWT_TIME      63898
+#define FRAME_LEN_MAX_EX     1023
+#ifndef FCS_LEN
+#define FCS_LEN              2
+#endif
+#define TX_ANT_DLY           16385
+#define RX_ANT_DLY           16385
+
+/* ─── DS-TWR 参数 ─── */
+#define POLL_TX_TO_RESP_RX_DLY_UUS    400
+#define RESP_RX_TIMEOUT_UUS           15000
+#define RESP_RX_TO_FINAL_TX_DLY_UUS   5000
+#define PRE_TIMEOUT                   0
+#define RNG_DELAY_MS                  1000
+
+/* ─── UWB 无线配置 ─── */
+static dwt_config_t config = {
+    5, DWT_PLEN_128, DWT_PAC8, 9, 9, 1,
+    DWT_BR_6M8, DWT_PHRMODE_STD, DWT_PHRRATE_STD,
+    (129 + 8 - 8), DWT_STS_MODE_OFF, DWT_STS_LEN_64, DWT_PDOA_M0
+};
+
+/* ─── DS-TWR 消息 ─── */
+static uint8_t tx_poll_msg[]  = {0x41,0x88,0,0xCA,0xDE,'W','A','V','E',0x21};
+static uint8_t rx_resp_msg[]  = {0x41,0x88,0,0xCA,0xDE,'V','E','W','A',0x10,0x02,0,0};
+static uint8_t tx_final_msg[] = {0x41,0x88,0,0xCA,0xDE,'W','A','V','E',0x23,
+                                  0,0,0,0, 0,0,0,0, 0,0,0,0};
+
+#define ALL_MSG_COMMON_LEN      10
+#define ALL_MSG_SN_IDX          2
+#define FINAL_MSG_POLL_TX_IDX   10
+#define FINAL_MSG_RESP_RX_IDX   14
+#define FINAL_MSG_FINAL_TX_IDX  18
+#define FINAL_MSG_TS_LEN        4
+#define RX_BUF_LEN              24
+
+static uint8_t  rx_buffer[RX_BUF_LEN];
+static uint32_t status_reg;
+static uint8_t  frame_seq_nb;
+static uint64_t poll_tx_ts, resp_rx_ts, final_tx_ts;
+
+/* ====================================================================
+ *  调试串口 (PA9, 115200)
+ * ====================================================================*/
+static void uinit(void)
 {
     GPIO_InitTypeDef g; USART_InitTypeDef u;
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1 | RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
@@ -26,42 +72,62 @@ static void debug_init(void)
 }
 static void up(const char *s) { while (*s) { while (!(USART1->SR & 0x80)); USART1->DR = *s++; } }
 
-/* ─── 解析距离数据 ─── */
-/* 格式: P,1111,10cm\r\n 或 P0,AA00,10cm,20dB\r\n */
-static float parse_distance(const char *buf)
-{
-    float dist = -1.0f;
-    char *p;
-
-    /* 查找 "cm" 前面的数字 */
-    p = strstr(buf, "cm");
-    if (p)
-    {
-        /* 回退找到数字开始位置 */
-        char *num_end = p;
-        while (num_end > buf && *(num_end-1) != ',') num_end--;
-
-        dist = atof(num_end);
-    }
-
-    return dist;
+/* ====================================================================
+ *  时间戳工具
+ * ====================================================================*/
+static uint64_t get_tx_timestamp_u64(void) {
+    uint8_t t[5]; uint64_t v = 0; dwt_readtxtimestamp(t);
+    for (int i = 4; i >= 0; i--) { v <<= 8; v |= t[i]; } return v;
+}
+static uint64_t get_rx_timestamp_u64(void) {
+    uint8_t t[5]; uint64_t v = 0; dwt_readrxtimestamp(t);
+    for (int i = 4; i >= 0; i--) { v <<= 8; v |= t[i]; } return v;
+}
+static void final_msg_set_ts(uint8_t *ts_field, uint64_t ts) {
+    for (int i = 0; i < FINAL_MSG_TS_LEN; i++) { ts_field[i] = (uint8_t)ts; ts >>= 8; }
 }
 
-/* ─── 解析 SNR ─── */
-static int parse_snr(const char *buf)
+/* ====================================================================
+ *  UWB 初始化
+ * ====================================================================*/
+static void uwb_init(void)
 {
-    int snr = -1;
-    char *p;
+    UWB_Hardware_Init();
+    reset_DWIC(); Delay_ms(100);
+    while (!dwt_checkidlerc());
 
-    p = strstr(buf, "dB");
-    if (p)
-    {
-        char *num_end = p;
-        while (num_end > buf && *(num_end-1) != ',') num_end--;
-        snr = atoi(num_end);
+    if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
+        OLED_ShowString(1, 1, "UWB: INIT ERR "); up("INIT ERR\r\n"); while (1);
+    }
+    if (dwt_configure(&config)) {
+        OLED_ShowString(1, 1, "UWB: CFG ERR  "); up("CFG ERR\r\n"); while (1);
     }
 
-    return snr;
+    { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
+    dwt_setrxantennadelay(RX_ANT_DLY);
+    dwt_settxantennadelay(TX_ANT_DLY);
+    dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
+    dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
+    dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
+}
+
+/* ====================================================================
+ *  BLE 断开时 UWB 进入休眠，重连后重新初始化
+ * ====================================================================*/
+static void ble_check_and_sleep(uint32_t *id)
+{
+    if (BLE_IsConnected()) return;
+
+    OLED_ShowString(3, 1, "BLE: Disconn.  ");
+    OLED_ShowString(1, 1, "UWB: Stopped   ");
+    dwt_entersleep(0);
+
+    while (!BLE_IsConnected()) { Delay_ms(500); }
+
+    uwb_init();
+    OLED_ShowString(3, 1, "BLE: Connected ");
+    *id = dwt_readdevid();
+    { char b[16]; snprintf(b,16,"UWB: %08lX",(unsigned long)*id); OLED_ShowString(1,1,b); }
 }
 
 /* ====================================================================
@@ -69,98 +135,96 @@ static int parse_snr(const char *buf)
  * ====================================================================*/
 int main(void)
 {
-    char ewm_buf[128];
-    char oled_line1[20], oled_line2[20];
-    float distance = -1.0f;
-    int snr = -1;
+    uint32_t id; int ret;
 
-    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
-    Delay_Init();
-    debug_init();
-    up("\r\nSTM32 EWM550 KEY v1.0\r\n");
-
+    uinit();
+    up("\r\nSTM32 KEY v2.0\r\n");
     OLED_Init();
     OLED_ShowString(1, 1, "UWB: Init...");
     OLED_ShowString(3, 1, "BLE: Init...");
 
-    /* BLE 初始化 */
+    /* BLE 初始化，等待连接 */
     BLE_Init();
     up("BLE init OK\r\n");
     OLED_ShowString(3, 1, "BLE: Waiting..");
-    while (!BLE_IsConnected()) { Delay_ms(500); }
+    while (!BLE_IsConnected()) {
+        Delay_ms(500);
+    }
     OLED_ShowString(3, 1, "BLE: Connected ");
 
-    /* EWM550 初始化 */
-    EWM550_Init(921600);
-    up("EWM550 UART3 init OK\r\n");
+    /* UWB 初始化 */
+    uwb_init();
+    id = dwt_readdevid();
+    { char b[16]; snprintf(b,16,"UWB: %08lX",(unsigned long)id); OLED_ShowString(1,1,b); up(b); up("\r\n"); }
 
-    /* 配置为标签模式 (Responder) */
-    EWM550_Reset();
-    up("EWM550 reset OK\r\n");
+    up("DS-TWR running\r\n");
 
-    EWM550_SetRole(0);  /* 0=Responder (标签) */
-    up("EWM550 role=Responder\r\n");
-
-    EWM550_SetAddress("1111");  /* 标签地址 */
-    up("EWM550 addr=1111\r\n");
-
-    OLED_ShowString(1, 1, "UWB: Ready     ");
-    up("EWM550 running\r\n");
-
-    while (1)
-    {
+    while (1) {
         /* BLE 连接检查 */
-        if (!BLE_IsConnected())
-        {
-            OLED_ShowString(3, 1, "BLE: Disconn.  ");
-            OLED_ShowString(1, 1, "UWB: Stopped   ");
-            OLED_ShowString(2, 1, "                ");
+        ble_check_and_sleep(&id);
 
-            /* 进入低功耗 */
-            EWM550_SendCmd("+++");
-            Delay_ms(100);
-            EWM550_SendCmd("AT+SLEEP=1\r\n");  /* 深度休眠 */
-            Delay_ms(100);
+        /* Poll */
+        dwt_setpreambledetecttimeout(PRE_TIMEOUT);
+        tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+        dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0);
+        dwt_writetxfctrl(sizeof(tx_poll_msg) + FCS_LEN, 0, 1);
+        dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
 
-            while (!BLE_IsConnected()) { Delay_ms(500); }
+        /* Wait Resp */
+        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
+                 (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR))) {}
+        frame_seq_nb++;
 
-            /* 唤醒 */
-            EWM550_Reset();
-            EWM550_SetRole(0);
-            EWM550_SetAddress("1111");
-
-            OLED_ShowString(3, 1, "BLE: Connected ");
-            OLED_ShowString(1, 1, "UWB: Ready     ");
+        if (!(status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
+            dwt_write32bitreg(SYS_STATUS_ID,
+                SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
+            { char dbg[20]; snprintf(dbg,20,"UWB: TO %04lX",(unsigned long)(status_reg & 0xFFFF)); OLED_ShowString(1,1,dbg); }
+            up("T"); goto next;
         }
 
-        /* 读取 EWM550 数据 */
-        memset(ewm_buf, 0, sizeof(ewm_buf));
-        if (EWM550_WaitResponse(ewm_buf, sizeof(ewm_buf), 100))
+        /* Read Resp */
         {
-            /* 解析距离 */
-            distance = parse_distance(ewm_buf);
-            snr = parse_snr(ewm_buf);
-
-            if (distance >= 0)
-            {
-                snprintf(oled_line1, sizeof(oled_line1), "UWB: %.0f cm   ", distance);
-                OLED_ShowString(1, 1, oled_line1);
-
-                if (snr >= 0)
-                {
-                    snprintf(oled_line2, sizeof(oled_line2), "SNR: %d dB     ", snr);
-                    OLED_ShowString(2, 1, oled_line2);
-                }
-
-                up(ewm_buf);
-            }
-        }
-        else
-        {
-            /* 无数据 */
-            OLED_ShowString(2, 1, "SNR: -- dB     ");
+            uint32_t fl = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
+            if (fl <= RX_BUF_LEN) dwt_readrxdata(rx_buffer, fl, 0);
+            rx_buffer[ALL_MSG_SN_IDX] = 0;
+            if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) != 0) { up("B"); goto next; }
         }
 
-        Delay_ms(100);
+        /* Final */
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+        poll_tx_ts = get_tx_timestamp_u64();
+        resp_rx_ts = get_rx_timestamp_u64();
+
+        { uint32_t ft = (uint32_t)((resp_rx_ts + (RESP_RX_TO_FINAL_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8);
+          dwt_setdelayedtrxtime(ft);
+          final_tx_ts = (((uint64_t)(ft & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY; }
+
+        final_msg_set_ts(&tx_final_msg[FINAL_MSG_POLL_TX_IDX], poll_tx_ts);
+        final_msg_set_ts(&tx_final_msg[FINAL_MSG_RESP_RX_IDX], resp_rx_ts);
+        final_msg_set_ts(&tx_final_msg[FINAL_MSG_FINAL_TX_IDX], final_tx_ts);
+        tx_final_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+        dwt_writetxdata(sizeof(tx_final_msg), tx_final_msg, 0);
+        dwt_writetxfctrl(sizeof(tx_final_msg) + FCS_LEN, 0, 1);
+
+        ret = dwt_starttx(DWT_START_TX_DELAYED);
+        if (ret != DWT_SUCCESS) {
+            tx_final_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+            dwt_writetxdata(sizeof(tx_final_msg), tx_final_msg, 0);
+            dwt_writetxfctrl(sizeof(tx_final_msg) + FCS_LEN, 0, 1);
+            ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
+        }
+
+        OLED_ShowString(2, 1, "UWB: Resp OK  "); up("R");
+        if (ret == DWT_SUCCESS) {
+            while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK));
+            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+            frame_seq_nb++;
+            OLED_ShowString(2, 1, "UWB: Final OK "); up("S\r\n");
+        } else {
+            OLED_ShowString(2, 1, "UWB: Final FAIL"); up("F\r\n");
+        }
+
+next:
+        Delay_ms(RNG_DELAY_MS);
     }
 }
