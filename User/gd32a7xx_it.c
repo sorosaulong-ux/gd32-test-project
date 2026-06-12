@@ -113,40 +113,8 @@ void UsageFault_Handler(void)
 */
 void DebugMon_Handler(void)
 {
-    /* if DebugMon exception occurs, go to infinite loop */
     while(1) {
     }
-}
-
-/*!
-    \brief      this function handles EXTI10_15 interrupt (KEY1: PC13)
-    \param[in]  none
-    \param[out] none
-    \retval     none
-*/
-void EXTI10_15_IRQHandler(void)
-{
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-    if (SET == exti_interrupt_flag_get(EXTI_13)) {
-        exti_interrupt_flag_clear(EXTI_13);
-
-        /* 去抖: 20ms 后读电平 */
-        uint32_t cnt = 0;
-        while (cnt++ < 100000) { __NOP(); }
-
-        if (RESET == gpio_input_bit_get(GPIOC, GPIO_PIN_13)) {
-            if (BUZZER_Status == BUZZER_ON)
-                BUZZER_Set(BUZZER_OFF);
-            else
-                BUZZER_Set(BUZZER_ON);
-        }
-    }
-
-    /* UWB IRQ 处理 (保留兼容) */
-    process_deca_irq();
-
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /* ── FreeRTOS tick hook: called from xPortSysTickHandler ── */
@@ -155,3 +123,23 @@ void vApplicationTickHook(void)
     delay_decrement();
     uwb_tick_inc();
 }
+
+/* ── FreeRTOS required hooks ── */
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+    (void)xTask; (void)pcTaskName;
+    while (1) {}
+}
+
+void vApplicationMallocFailedHook(void)
+{
+    while (1) {}
+}
+
+/* ── Global stubs (onenet.c references, will be wired up later) ── */
+int  g_system_status;
+int  g_car_lock;
+int  g_brake;
+int  g_parking_brake;
+float g_key_distance;
+int  g_ble_connected;
