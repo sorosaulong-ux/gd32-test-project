@@ -142,8 +142,3 @@ void make_very_short_wakeup_io(void)
     Delay_us(10);
     GPIO_SetBits(DW_WKUP_PORT, DW_WKUP_PIN);    // WAKEUP 拉高
 }
-
-void make_very_short_wakeup_io(void) 
-{
-    // Dummy function
-}
