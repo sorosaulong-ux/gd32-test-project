@@ -340,7 +340,7 @@
               <MiscControls>-Wassign-enum</MiscControls>
               <Define>GD32A711X_A712X,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User;.\DW3000;.\py;.\NET\MQTT;.\NET\onenet\inc;.\NET\CJSON;.\FreeRTOS;.\FreeRTOS\Source\include;.\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1</IncludePath>
+              <IncludePath>..\;.\Hardware;.\Library;.\Start;.\System;.\User;.\DW3000;.\py;.\NET\MQTT;.\NET\onenet\inc;.\NET\CJSON;.\FreeRTOS;.\FreeRTOS\Source\include;.\FreeRTOS\Source\portable\GCC\ARM_CM7\r0p1;.\User\task</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -588,6 +588,21 @@
               <FileName>ble.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\ble.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_tasks.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\task\app_tasks.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_tasks.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\task\app_tasks.h</FilePath>
+            </File>
+            <File>
+              <FileName>key_exti.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\task\key_exti.c</FilePath>
             </File>
           </Files>
         </Group>

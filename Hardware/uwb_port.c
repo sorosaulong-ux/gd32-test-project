@@ -216,21 +216,7 @@ void process_deca_irq(void)
         if (s_dwic_isr) s_dwic_isr();
 }
 
-void EXTI5_9_IRQHandler(void)
-{
-    if (SET == exti_interrupt_flag_get(EXTI_8)) {
-        exti_interrupt_flag_clear(EXTI_8);
-        if (s_dwic_isr) s_dwic_isr();
-    }
-}
-
-void EXTI10_15_IRQHandler(void)
-{
-    if (SET == exti_interrupt_flag_get(EXTI_10)) {
-        exti_interrupt_flag_clear(EXTI_10);
-        if (s_dwic_isr) s_dwic_isr();
-    }
-}
+/* NOTE: EXTI handlers moved to User/task/key_exti.c (merged with key ISRs) */
 
 /* ====================================================================
  *  Timing
