@@ -22,6 +22,7 @@
 #include "uwb.h"
 #include "uwb_port.h"
 #include "ml_predict.h"
+#include "ble.h"
 
 #include <stdio.h>
 
@@ -40,6 +41,7 @@ uint8_t  g_brake = 0;           /* 刹车: 0=松开, 1=踩下 */
 uint8_t  g_parking_brake = 0;   /* 手刹: 0=放下, 1=拉上 */
 uint8_t  g_system_status = 0;   /* 系统状态: 0=正常 */
 float    g_key_distance = 99.0f;/* 车钥匙距离(m) */
+uint8_t  g_ble_connected = 0;   /* BLE连接: 0=断开, 1=连接 */
 
 /* ====================================================================
  *  KEY2 (GPIOL.3) — 模式切换 (长按500ms)
@@ -88,6 +90,7 @@ static void system_init(void)
     key2_init();
     key3_init();  /* 刹车按键 PL4 */
     key4_init();  /* 手刹按键 PL5 */
+    ble_init();   /* BLE蓝牙 PJ0/PJ1/PJ2 */
 
     printf("\r\n=== GD32A7 Vehicle Terminal ===\r\n\r\n");
 }
@@ -253,6 +256,9 @@ static void main_loop(void)
         key2_poll();
         key3_poll();  /* 刹车 */
         key4_poll();  /* 手刹 */
+
+        /* ── BLE 连接状态 ── */
+        g_ble_connected = ble_is_connected();
 
         /* ── 蜂鸣器状态变化 → CAN 同步到 GD32F3 ── */
         if (BUZZER_Status != last_buzzer) {

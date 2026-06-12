@@ -148,6 +148,18 @@ typedef enum
 #define EVAL_COMB_TX_AF                   GPIO_AF_13
 #define EVAL_COMB_RX_AF                   GPIO_AF_13
 
+/* definition for BLE, connected to LINFLEXD_UART4 */
+#define EVAL_BLE                          LINFLEXD_UART4
+#define EVAL_BLE_CLK                      RCU_LINFLEXD4
+
+#define EVAL_BLE_TX_PIN                   GPIO_PIN_1
+#define EVAL_BLE_RX_PIN                   GPIO_PIN_0
+
+#define EVAL_BLE_GPIO_PORT                GPIOJ
+#define EVAL_BLE_GPIO_CLK                 RCU_GPIOJ
+#define EVAL_BLE_TX_AF                    GPIO_AF_13
+#define EVAL_BLE_RX_AF                    GPIO_AF_13
+
 /* function declarations */
 /* configure led GPIO */
 void gd_eval_led_init(led_typedef_enum lednum);

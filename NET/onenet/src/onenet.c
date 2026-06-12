@@ -48,6 +48,7 @@ extern uint8_t  g_brake;
 extern uint8_t  g_parking_brake;
 extern uint8_t  g_system_status;
 extern float    g_key_distance;
+extern uint8_t  g_ble_connected;
 
 /*
 ************************************************************
@@ -214,6 +215,11 @@ unsigned char OneNet_FillBuf(char *buf)
 	/* Distance */
 	memset(text, 0, sizeof(text));
 	sprintf(text, ",\"Distance\":{\"value\":%.1f}", (double)g_key_distance);
+	strcat(buf, text);
+
+	/* BLE_Connected */
+	memset(text, 0, sizeof(text));
+	sprintf(text, ",\"BLE_Connected\":{\"value\":%s}", g_ble_connected ? "true" : "false");
 	strcat(buf, text);
 	
 	strcat(buf, "}}");
