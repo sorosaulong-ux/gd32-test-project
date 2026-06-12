@@ -4,7 +4,7 @@
 ************************************************************
 *	CAN_Init_Config
 *	初始化 CAN0, PB8(RX) PB9(TX) partial remap
-*	500Kbps (APB1=36MHz 或 60MHz 均可工作)
+*	500Kbps
 ************************************************************
 */
 void CAN_Init_Config(void)
@@ -111,90 +111,6 @@ uint8_t CAN_Receive_Msg(uint32_t *id, uint8_t *buf)
         return 1; 
     }
     
-    can_message_receive(CAN0, CAN_FIFO0, &rx_message);
-    
-    *id = rx_message.rx_sfid;
-    for(uint8_t i = 0; i < rx_message.rx_dlen; i++) {
-        buf[i] = rx_message.rx_data[i];
-    }
-    return 0; 
-}
-
-    can_init(CAN0, &can_parameter);
-
-    /* 6. CAN 过滤器: 接收所有帧到 FIFO0 */
-    can_filter.filter_number = 0;
-    can_filter.filter_mode = CAN_FILTERMODE_MASK;
-    can_filter.filter_bits = CAN_FILTERBITS_32BIT;
-    can_filter.filter_list_high = 0x0000;
-    can_filter.filter_list_low = 0x0000;
-    can_filter.filter_mask_high = 0x0000;
-    can_filter.filter_mask_low = 0x0000;
-    can_filter.filter_fifo_number = CAN_FIFO0;
-    can_filter.filter_enable = ENABLE;
-    can_filter_init(&can_filter);
-}
-/*
-************************************************************
-*	�������ƣ�	CAN_Send_Msg
-*	˵����		���ͱ�׼����֡ (��� 8 �ֽ�)
-* ����ֵ��    0: ���ͳɹ�(�յ��Է�ACK)  1: ���ͳ�ʱ�����
-************************************************************
-*/
-uint8_t CAN_Send_Msg(uint32_t id, uint8_t *msg, uint8_t len)
-{
-    can_transmit_message_struct tx_message;
-    // ��΢�Ŵ�һ�㳬ʱʱ�䣬���Զ��ش���һ������
-    uint32_t timeout = 0x0FFFFF; 
-    
-    if(len > 8) len = 8;
-    
-    tx_message.tx_sfid = id;               
-    tx_message.tx_efid = 0x00;
-    tx_message.tx_ff = CAN_FF_STANDARD;    
-    tx_message.tx_ft = CAN_FT_DATA;        
-    tx_message.tx_dlen = len;              
-    
-    for(uint8_t i = 0; i < len; i++) {
-        tx_message.tx_data[i] = msg[i];
-    }
-    
-    // �ѱ���������������
-    uint8_t mailbox = can_message_transmit(CAN0, &tx_message);
-    
-    // �����ȴ���ֻҪ���ڷ����У���һֱ�ȣ�ֱ���ɹ���ʧ�ܻ�ʱ
-    while((can_transmit_states(CAN0, mailbox) == CAN_TRANSMIT_PENDING) && (timeout != 0))
-    {
-        timeout--;
-    }
-    
-    // ���ռ��޸���������ȷ�ж�����״̬�ǲ��� OK��
-    if(can_transmit_states(CAN0, mailbox) == CAN_TRANSMIT_OK)
-    {
-        return 0; // ��ɹ�������ȥ���յ��� ACK
-    }
-    
-    // ����ߵ����˵����ʱ�˳��ˣ�����״̬�� FAILED
-    return 1; // ��ʧ�ܣ�û���ߡ������ʴ������豸������
-}
-
-/*
-************************************************************
-*	�������ƣ�	CAN_Receive_Msg
-*	˵����		��ѯ���� CAN ����
-* ����ֵ��    0: �յ�����  1: û�յ�����
-************************************************************
-*/
-uint8_t CAN_Receive_Msg(uint32_t *id, uint8_t *buf)
-{
-    can_receive_message_struct rx_message;
-    
-    // ��� FIFO0 ���Ƿ��б���
-    if(can_receive_message_length_get(CAN0, CAN_FIFO0) == 0) {
-        return 1; 
-    }
-    
-    // ��ȡ����
     can_message_receive(CAN0, CAN_FIFO0, &rx_message);
     
     *id = rx_message.rx_sfid;
