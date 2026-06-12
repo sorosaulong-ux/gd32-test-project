@@ -38,66 +38,6 @@ static const char* get_error_text(uint8_t err, uint8_t sub)
     }
 }
 
-static void can_diagnostics(void)
-{
-    uint32_t msr, tsr, rf0r, esr;
-    uint32_t rx_id;
-    uint8_t rx_buf[8];
-    
-    UsartPrintf(USART_DEBUG, "\r\n=== CAN Diagnostics ===\r\n");
-    
-    msr = CAN_STAT(CAN0);
-    UsartPrintf(USART_DEBUG, "MSR  = 0x%08lX\r\n", (unsigned long)msr);
-    UsartPrintf(USART_DEBUG, "  IWS (Init)   : %s\r\n", (msr & CAN_STAT_IWS) ? "YES" : "NO");
-    UsartPrintf(USART_DEBUG, "  SLPWS (Sleep): %s\r\n", (msr & CAN_STAT_SLPWS) ? "YES" : "NO");
-    
-    tsr = CAN_TSTAT(CAN0);
-    UsartPrintf(USART_DEBUG, "TSR  = 0x%08lX\r\n", (unsigned long)tsr);
-    UsartPrintf(USART_DEBUG, "  TME0 (MB0 empty): %s\r\n", (tsr & CAN_TSTAT_TME0) ? "YES" : "NO");
-    
-    rf0r = CAN_RFIFO0(CAN0);
-    UsartPrintf(USART_DEBUG, "RF0R = 0x%08lX\r\n", (unsigned long)rf0r);
-    UsartPrintf(USART_DEBUG, "  FMP (messages): %lu\r\n", (unsigned long)(rf0r & CAN_RFIFO0_RFL0));
-    
-    esr = CAN_ERR(CAN0);
-    UsartPrintf(USART_DEBUG, "ESR  = 0x%08lX\r\n", (unsigned long)esr);
-    UsartPrintf(USART_DEBUG, "  TEC (TxErr)  : %lu\r\n", (unsigned long)((esr & CAN_ERR_TECNT) >> 16));
-    UsartPrintf(USART_DEBUG, "  REC (RxErr)  : %lu\r\n", (unsigned long)((esr & CAN_ERR_RECNT) >> 24));
-    UsartPrintf(USART_DEBUG, "  LEC (LastErr): %lu\r\n", (unsigned long)((esr & CAN_ERR_ERRN) >> 4));
-    UsartPrintf(USART_DEBUG, "  BOFF (BusOff): %s\r\n", (esr & CAN_ERR_BOERR) ? "YES !! BUS-OFF" : "NO");
-    UsartPrintf(USART_DEBUG, "  EPVF (ErrPassive): %s\r\n", (esr & CAN_ERR_PERR) ? "YES" : "NO");
-    UsartPrintf(USART_DEBUG, "  EWGF (ErrWarn): %s\r\n", (esr & CAN_ERR_WERR) ? "YES" : "NO");
-    
-    UsartPrintf(USART_DEBUG, "\r\n--- CAN TX Test ---\r\n");
-    {
-        uint8_t test_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
-        if(CAN_Send_Msg(0x7FF, test_data, 4) == 0)
-            UsartPrintf(USART_DEBUG, "TX OK (ID=0x7FF)\r\n");
-        else
-            UsartPrintf(USART_DEBUG, "TX FAILED - timeout!\r\n");
-    }
-    
-    DelayMs(100);
-    esr = CAN_ERR(CAN0);
-    UsartPrintf(USART_DEBUG, "After TX: TEC=%lu REC=%lu LEC=%lu BOFF=%s\r\n",
-        (unsigned long)((esr & CAN_ERR_TECNT) >> 16),
-        (unsigned long)((esr & CAN_ERR_RECNT) >> 24),
-        (unsigned long)((esr & CAN_ERR_ERRN) >> 4),
-        (esr & CAN_ERR_BOERR) ? "YES" : "NO");
-    
-    if(CAN_Receive_Msg(&rx_id, rx_buf) == 0)
-    {
-        UsartPrintf(USART_DEBUG, "RX OK ID=0x%lX Data=%02X %02X %02X %02X\r\n",
-            (unsigned long)rx_id, rx_buf[0], rx_buf[1], rx_buf[2], rx_buf[3]);
-    }
-    else
-    {
-        UsartPrintf(USART_DEBUG, "RX: No data\r\n");
-    }
-    
-    UsartPrintf(USART_DEBUG, "=== End Diagnostics ===\r\n\r\n");
-}
-
 static void Hardware_Init(void)
 {
     nvic_priority_group_set(NVIC_PRIGROUP_PRE2_SUB2);
@@ -121,7 +61,6 @@ int main(void)
     uint8_t oled_inited = 0;
     
     Hardware_Init();
-    can_diagnostics();
     
     OLED_Clear();
     OLED_ShowString(1, 1, "CAN: Waiting");
