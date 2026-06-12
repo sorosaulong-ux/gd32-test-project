@@ -142,11 +142,16 @@ static void key_main(void)
             OLED_ShowString(1, 1, "UWB: Stopped   ");
             dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
-            dwt_wakeup_ic();
-            Delay_ms(10);
-            reset_DWIC(); Delay_ms(2);
+            /* 重连后重新初始化UWB (完整复位流程) */
+            UWB_Hardware_Init();
+            reset_DWIC(); Delay_ms(100);
             while (!dwt_checkidlerc());
-            dwt_initialise(DWT_DW_INIT);
+            if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
+                OLED_ShowString(1, 1, "UWB: RETRY..   ");
+                reset_DWIC(); Delay_ms(100);
+                while (!dwt_checkidlerc());
+                dwt_initialise(DWT_DW_INIT);
+            }
             dwt_configure(&config);
             { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
             dwt_setrxantennadelay(RX_ANT_DLY);
@@ -282,11 +287,16 @@ static void radar_tx_main(void)
             OLED_ShowString(1, 1, "UWB: Stopped   ");
             dwt_entersleep(0);
             while (!BLE_IsConnected()) { Delay_ms(500); }
-            dwt_wakeup_ic();
-            Delay_ms(10);
-            reset_DWIC(); Delay_ms(2);
+            /* 重连后重新初始化UWB (完整复位流程) */
+            UWB_Hardware_Init();
+            reset_DWIC(); Delay_ms(100);
             while (!dwt_checkidlerc());
-            dwt_initialise(DWT_DW_INIT);
+            if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
+                OLED_ShowString(1, 1, "UWB: RETRY..   ");
+                reset_DWIC(); Delay_ms(100);
+                while (!dwt_checkidlerc());
+                dwt_initialise(DWT_DW_INIT);
+            }
             dwt_configure(&config);
             { dwt_txconfig_t tp = {0x34, 0xfdfdfdfd, 0x0}; dwt_configuretxrf(&tp); }
             dwt_settxantennadelay(TX_ANT_DLY);
