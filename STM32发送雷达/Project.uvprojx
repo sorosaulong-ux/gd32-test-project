@@ -694,6 +694,16 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\OLED_Font.h</FilePath>
             </File>
+            <File>
+              <FileName>ble.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\ble.h</FilePath>
+            </File>
+            <File>
+              <FileName>ble.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\ble.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
