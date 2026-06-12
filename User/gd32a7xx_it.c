@@ -33,8 +33,11 @@ OF SUCH DAMAGE.
 */
 
 #include "gd32a7xx_it.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "systick.h"
 #include "uwb_port.h"
+#include "key.h"
 
 /*!
     \brief      this function handles NMI exception
@@ -102,19 +105,6 @@ void UsageFault_Handler(void)
 }
 
 /*!
-    \brief      this function handles SVC exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
-*/
-void SVC_Handler(void)
-{
-    /* if SVC exception occurs, go to infinite loop */
-    while(1) {
-    }
-}
-
-/*!
     \brief      this function handles DebugMon exception
     \param[in]  none
     \param[out] none
@@ -128,25 +118,38 @@ void DebugMon_Handler(void)
 }
 
 /*!
-    \brief      this function handles PendSV exception
+    \brief      this function handles EXTI10_15 interrupt (KEY1: PC13)
     \param[in]  none
     \param[out] none
     \retval     none
 */
-void PendSV_Handler(void)
+void EXTI10_15_IRQHandler(void)
 {
-    /* if PendSV exception occurs, go to infinite loop */
-    while(1) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    if (SET == exti_interrupt_flag_get(EXTI_13)) {
+        exti_interrupt_flag_clear(EXTI_13);
+
+        /* 去抖: 20ms 后读电平 */
+        uint32_t cnt = 0;
+        while (cnt++ < 100000) { __NOP(); }
+
+        if (RESET == gpio_input_bit_get(GPIOC, GPIO_PIN_13)) {
+            if (BUZZER_Status == BUZZER_ON)
+                BUZZER_Set(BUZZER_OFF);
+            else
+                BUZZER_Set(BUZZER_ON);
+        }
     }
+
+    /* UWB IRQ 处理 (保留兼容) */
+    process_deca_irq();
+
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-/*!
-    \brief      this function handles SysTick exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
-*/
-void SysTick_Handler(void)
+/* ── FreeRTOS tick hook: called from xPortSysTickHandler ── */
+void vApplicationTickHook(void)
 {
     delay_decrement();
     uwb_tick_inc();
