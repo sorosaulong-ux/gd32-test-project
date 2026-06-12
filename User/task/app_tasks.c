@@ -48,7 +48,7 @@ uint8_t g_ble_connected;
 
 /* ── 模式切换 (KEY2 长按) ── */
 typedef enum { MODE_RANGING, MODE_RADAR } sys_mode_t;
-static sys_mode_t g_mode = MODE_RADAR;
+static volatile sys_mode_t g_mode = MODE_RADAR;
 
 /* ====================================================================
  *  vTaskCanTX — 从队列取 CAN 帧并发送
@@ -79,7 +79,7 @@ void can_diag_send_error(uint8_t err_code, uint8_t sub_code)
     msg.data[1] = sub_code;
     msg.data[2] = 0x00;
     msg.data[3] = (err_code == 0 && sub_code == 0) ? 0x55 : 0xAA;
-    xQueueSend(xCanTxQueue, &msg, 0);
+    xQueueSend(xCanTxQueue, &msg, pdMS_TO_TICKS(10));
 }
 
 void can_diag_send_ranging(float distance_m)
@@ -93,7 +93,7 @@ void can_diag_send_ranging(float distance_m)
     msg.data[1] = (uint8_t)(mm >> 16);
     msg.data[2] = (uint8_t)(mm >> 8);
     msg.data[3] = (uint8_t)(mm);
-    xQueueSend(xCanTxQueue, &msg, 0);
+    xQueueSend(xCanTxQueue, &msg, pdMS_TO_TICKS(10));
 }
 
 void can_diag_send_radar(uint8_t detected, uint8_t confidence)
@@ -105,7 +105,7 @@ void can_diag_send_radar(uint8_t detected, uint8_t confidence)
     msg.data[1] = confidence;
     msg.data[2] = 0x00;
     msg.data[3] = 0x00;
-    xQueueSend(xCanTxQueue, &msg, 0);
+    xQueueSend(xCanTxQueue, &msg, pdMS_TO_TICKS(10));
 }
 
 /* ====================================================================
@@ -348,7 +348,7 @@ void can_diag_send_buzzer(uint8_t on)
     msg.data[1] = 0x00;
     msg.data[2] = 0x00;
     msg.data[3] = 0x00;
-    xQueueSend(xCanTxQueue, &msg, 0);
+    xQueueSend(xCanTxQueue, &msg, pdMS_TO_TICKS(10));
 }
 
 /* ====================================================================
@@ -363,7 +363,7 @@ void can_diag_send_vehicle_cmd(uint8_t cmd)
     msg.data[1] = 0x00;
     msg.data[2] = 0x00;
     msg.data[3] = 0x00;
-    xQueueSend(xCanTxQueue, &msg, 0);
+    xQueueSend(xCanTxQueue, &msg, pdMS_TO_TICKS(10));
 }
 
 /* ====================================================================
