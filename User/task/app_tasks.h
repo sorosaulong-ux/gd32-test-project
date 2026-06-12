@@ -45,6 +45,7 @@ extern SemaphoreHandle_t xKey_Semaphore;
 
 /* ── API ── */
 void app_tasks_init(void);
+void key_exti_init(void);
 
 /* ── 任务函数 ── */
 void vTaskUWB(void *pvParameters);

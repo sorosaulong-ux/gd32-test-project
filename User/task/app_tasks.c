@@ -312,6 +312,9 @@ void app_tasks_init(void)
     xUWB_Semaphore = xSemaphoreCreateBinary();
     xKey_Semaphore = xSemaphoreCreateBinary();
 
+    /* 初始化按键 EXTI 中断 */
+    key_exti_init();
+
     /* 创建 CAN TX 任务 (独立发送) */
     xTaskCreate(vTaskCanTX, "CANTX", 256, NULL, tskIDLE_PRIORITY + 4, NULL);
 
