@@ -45,6 +45,9 @@ int main(void)
     
     Hardware_Init();
     
+    /* ── CAN 诊断 ── */
+    can_diagnostics();
+    
     /* ── 初始化OLED ── */
     OLED_Clear();
     OLED_ShowString(1, 1, "CAN: Waiting");
@@ -175,4 +178,80 @@ void Hardware_Init(void)
     CAN_Init_Config();  
 	
     UsartPrintf(USART_DEBUG, "Hardware init OK\r\n");
+}
+
+/* ====================================================================
+ *  CAN 详细调试诊断
+ * ====================================================================*/
+static void can_diagnostics(void)
+{
+    uint32_t msr, tsr, rf0r, esr;
+    
+    UsartPrintf(USART_DEBUG, "\r\n=== CAN Diagnostics ===\r\n");
+    
+    /* 1. 读取 MSR (Master Status Register) */
+    msr = CAN0_STAT;
+    UsartPrintf(USART_DEBUG, "MSR  = 0x%08lX\r\n", (unsigned long)msr);
+    UsartPrintf(USART_DEBUG, "  SLAK (Sleep)  : %s\r\n", (msr & (1<<0)) ? "YES" : "NO");
+    UsartPrintf(USART_DEBUG, "  INAK (Init)   : %s\r\n", (msr & (1<<1)) ? "YES" : "NO");
+    
+    /* 2. 读取 TSR (Transmit Status Register) */
+    tsr = CAN0_TSTAT;
+    UsartPrintf(USART_DEBUG, "TSR  = 0x%08lX\r\n", (unsigned long)tsr);
+    UsartPrintf(USART_DEBUG, "  Mailbox0 state: %s\r\n",
+        ((tsr >> 0) & 3) == 0 ? "TXOK" : 
+        ((tsr >> 0) & 3) == 1 ? "ALST" : 
+        ((tsr >> 0) & 3) == 2 ? "TERR" : "PENDING");
+    UsartPrintf(USART_DEBUG, "  TME0 (MB0 empty): %s\r\n", (tsr & (1<<26)) ? "YES" : "NO");
+    
+    /* 3. 读取 RF0R (Receive FIFO 0 Register) */
+    rf0r = CAN0_RFIFO0;
+    UsartPrintf(USART_DEBUG, "RF0R = 0x%08lX\r\n", (unsigned long)rf0r);
+    UsartPrintf(USART_DEBUG, "  FMP (messages): %lu\r\n", (unsigned long)(rf0r & 3));
+    UsartPrintf(USART_DEBUG,  "  FULL : %s\r\n", (rf0r & (1<<3)) ? "YES" : "NO");
+    
+    /* 4. 读取 ESR (Error Status Register) */
+    esr = CAN0_ERR;
+    UsartPrintf(USART_DEBUG, "ESR  = 0x%08lX\r\n", (unsigned long)esr);
+    UsartPrintf(USART_DEBUG, "  TEC (TxErr)  : %lu\r\n", (unsigned long)((esr >> 16) & 0xFF));
+    UsartPrintf(USART_DEBUG, "  REC (RxErr)  : %lu\r\n", (unsigned long)((esr >> 24) & 0x7F));
+    UsartPrintf(USART_DEBUG, "  LEC (LastErr): %lu\r\n", (unsigned long)((esr >> 3) & 7));
+    UsartPrintf(USART_DEBUG, "  BOFF (BusOff): %s\r\n", (esr & (1<<2)) ? "YES !! BUS-OFF" : "NO");
+    UsartPrintf(USART_DEBUG, "  EPVF (ErrPassive): %s\r\n", (esr & (1<<1)) ? "YES" : "NO");
+    UsartPrintf(USART_DEBUG, "  EWGF (ErrWarn): %s\r\n", (esr & (1<<0)) ? "YES" : "NO");
+    
+    /* 5. 尝试发送测试帧 */
+    UsartPrintf(USART_DEBUG, "\r\n--- CAN TX Test ---\r\n");
+    {
+        uint8_t test_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
+        uint32_t rx_id;
+        uint8_t rx_buf[8];
+        
+        if(CAN_Send_Msg(0x7FF, test_data, 4) == 0)
+            UsartPrintf(USART_DEBUG, "TX OK (ID=0x7FF)\r\n");
+        else
+            UsartPrintf(USART_DEBUG, "TX FAILED - timeout!\r\n");
+    }
+    
+    /* 6. 再次读取 ESR 检查发送后状态 */
+    DelayMs(100);
+    esr = CAN0_ERR;
+    UsartPrintf(USART_DEBUG, "After TX: TEC=%lu REC=%lu LEC=%lu BOFF=%s\r\n",
+        (unsigned long)((esr >> 16) & 0xFF),
+        (unsigned long)((esr >> 24) & 0x7F),
+        (unsigned long)((esr >> 3) & 7),
+        (esr & (1<<2)) ? "YES" : "NO");
+    
+    /* 7. 检查是否有数据收到 */
+    if(CAN_Receive_Msg(&rx_id, rx_buf) == 0)
+    {
+        UsartPrintf(USART_DEBUG, "RX OK ID=0x%lX Data=%02X %02X %02X %02X\r\n",
+            (unsigned long)rx_id, rx_buf[0], rx_buf[1], rx_buf[2], rx_buf[3]);
+    }
+    else
+    {
+        UsartPrintf(USART_DEBUG, "RX: No data\r\n");
+    }
+    
+    UsartPrintf(USART_DEBUG, "=== End Diagnostics ===\r\n\r\n");
 }
