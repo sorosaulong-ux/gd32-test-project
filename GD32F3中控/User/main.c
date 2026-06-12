@@ -57,8 +57,8 @@ int main(void)
     uint32_t rx_id;
     uint8_t last_fault = 255;
     uint8_t last_buzzer = 255;
+    uint8_t last_err = 255;
     uint16_t can_timeout = 0;
-    uint8_t oled_inited = 0;
     
     Hardware_Init();
     
@@ -132,10 +132,11 @@ int main(void)
                 last_fault = g_fault;
             }
             
-            if(g_fault || oled_inited == 0)
+            if(g_err_code != last_err)
             {
                 snprintf(buf, sizeof(buf), "Error: %-10s", get_error_text(g_err_code, g_err_sub));
                 OLED_ShowString(3, 1, buf);
+                last_err = g_err_code;
             }
             
             if(BUZZER_Status != last_buzzer)
@@ -144,8 +145,6 @@ int main(void)
                 OLED_ShowString(4, 1, buf);
                 last_buzzer = BUZZER_Status;
             }
-            
-            oled_inited = 1;
         }
         
         {
