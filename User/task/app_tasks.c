@@ -20,6 +20,8 @@
 #include "uwb.h"
 #include "uwb_port.h"
 #include "key.h"
+#include "ble.h"
+#include "can.h"
 #include "ml_predict.h"
 #include <stdio.h>
 #include <string.h>
@@ -35,7 +37,6 @@ SemaphoreHandle_t xUWB_Semaphore = NULL;
 SemaphoreHandle_t xKey_Semaphore = NULL;
 
 /* ── 外部全局变量 ── */
-volatile uint8_t BUZZER_Status;
 
 /* ── 车辆状态 ── */
 float   g_key_distance;
