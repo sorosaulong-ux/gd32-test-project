@@ -9,6 +9,7 @@
 #include "Delay.h"
 #include "OLED.h"
 #include "port.h"
+#include "ble.h"
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include <string.h>
@@ -102,6 +103,16 @@ static void key_main(void)
     OLED_Init();
     OLED_ShowString(1, 1, "KEY v2.0 (Init)");
 
+    BLE_Init();
+    up("BLE init OK\r\n");
+
+    OLED_ShowString(2, 1, "Waiting BLE...");
+    while (!BLE_IsConnected()) {
+        OLED_ShowString(2, 1, "Waiting BLE...");
+        Delay_ms(500);
+    }
+    OLED_ShowString(2, 1, "BLE Connected! ");
+
     UWB_Hardware_Init();
     reset_DWIC(); Delay_ms(2);
     while (!dwt_checkidlerc());
@@ -124,6 +135,15 @@ static void key_main(void)
     { char b[16]; snprintf(b,16,"ID:%08lX",(unsigned long)id); OLED_ShowString(2,1,b); up(b); up("\r\n"); }
 
     while (1) {
+        /* BLE 连接检查 */
+        if (!BLE_IsConnected()) {
+            OLED_ShowString(4, 1, "BLE OFF, UWB Stopped");
+            dwt_entersleep(DWT_PRESLEEP);
+            while (!BLE_IsConnected()) { Delay_ms(500); }
+            dwt_wakeup();
+            OLED_ShowString(4, 1, "BLE ON, UWB Resume ");
+        }
+
         /* Poll */
         dwt_setpreambledetecttimeout(PRE_TIMEOUT);
         tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
@@ -208,6 +228,16 @@ static void radar_tx_main(void)
     OLED_Init();
     OLED_ShowString(1, 1, "RADAR TX v1.0");
 
+    BLE_Init();
+    up("BLE init OK\r\n");
+
+    OLED_ShowString(2, 1, "Waiting BLE...");
+    while (!BLE_IsConnected()) {
+        OLED_ShowString(2, 1, "Waiting BLE...");
+        Delay_ms(500);
+    }
+    OLED_ShowString(2, 1, "BLE Connected! ");
+
     UWB_Hardware_Init();
     reset_DWIC(); Delay_ms(2);
     while (!dwt_checkidlerc());
@@ -230,6 +260,15 @@ static void radar_tx_main(void)
     up("RADAR TX running\r\n");
 
     while (1) {
+        /* BLE 连接检查 */
+        if (!BLE_IsConnected()) {
+            OLED_ShowString(4, 1, "BLE OFF, TX Stopped");
+            dwt_entersleep(DWT_PRESLEEP);
+            while (!BLE_IsConnected()) { Delay_ms(500); }
+            dwt_wakeup();
+            OLED_ShowString(4, 1, "BLE ON, TX Resume  ");
+        }
+
         tx_radar[2] = (uint8_t)(cnt & 0xFF);
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
         dwt_writetxdata(sizeof(tx_radar), tx_radar, 0);
