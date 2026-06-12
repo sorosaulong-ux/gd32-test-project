@@ -423,15 +423,22 @@ int uwb_ds_responder_poll(double *dist)
 {
     uint32_t frame_len;
     int ret;
+    uint32_t t0;
 
-    /* Phase 1: Wait for Poll */
+    /* Phase 1: Wait for Poll (超时200ms) */
     dwt_setpreambledetecttimeout(0);
     dwt_setrxtimeout(0);
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
+    t0 = uwb_tick_get();
     while (!((ds_status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
              (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-    { }
+    {
+        if (uwb_tick_get() - t0 > 200) {  /* 200ms 超时 */
+            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+            return 0;
+        }
+    }
 
     if (!(ds_status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
@@ -481,10 +488,17 @@ int uwb_ds_responder_poll(double *dist)
         return 0;
     }
 
-    /* Phase 3: Wait for Final */
+    /* Phase 3: Wait for Final (超时15ms) */
+    t0 = uwb_tick_get();
     while (!((ds_status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
              (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-    { }
+    {
+        if (uwb_tick_get() - t0 > 15) {  /* 15ms 超时 */
+            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+            ds_fsn++;
+            return 0;
+        }
+    }
 
     ds_fsn++;
     if (!(ds_status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {

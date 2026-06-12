@@ -116,6 +116,7 @@ static void health_check(void)
     static uint16_t cnt;
     static uint8_t  last_uwb_ok  = 1;
 
+    /* 每30秒检查一次 */
     if (++cnt < 600) return; cnt = 0;
 
     /* ── UWB2 ID 检测 ── */
@@ -142,23 +143,59 @@ static void health_check(void)
 }
 
 /* ====================================================================
+ *  quick_uwb_check — 快速检测UWB状态 (每次主循环都执行)
+ * ====================================================================*/
+static void quick_uwb_check(void)
+{
+    static uint32_t last_check_ms;
+    static uint8_t  last_uwb_ok = 1;
+    uint32_t now = uwb_tick_get();
+
+    /* 每2秒快速检测一次 */
+    if ((now - last_check_ms) < 2000) return;
+    last_check_ms = now;
+
+    uint32_t id = uwb_check_id();
+    uint8_t  uwb_ok = (id == 0xDECA0302U || id == 0xDECA0312U);
+
+    if (!uwb_ok && last_uwb_ok) {
+        can_diag_send_error(CAN_ERR_UWB, CAN_ERR_UWB_ID);
+        g_system_status = 1;
+        printf("[SYS] !! UWB2 ID: 0x%08lX (quick)\r\n", (unsigned long)id);
+    }
+    if (uwb_ok && !last_uwb_ok) {
+        can_diag_send_error(0, 0);
+        g_system_status = 0;
+        printf("[SYS] OK UWB2 restored (quick)\r\n");
+    }
+    last_uwb_ok = uwb_ok;
+}
+
+/* ====================================================================
  *  mode_ranging — DS-TWR Responder (UWB2 + STM32)
  * ====================================================================*/
 static uint8_t  rng_inited;
 static uint32_t rng_cnt;
+static uint32_t rng_fail_cnt;
 static void mode_ranging(void)
 {
     double dist;
+    int ret;
 
     if (!rng_inited) {
-        if (uwb_ds_responder_init() != UWB_OK) { printf("[RNG] Init FAIL\r\n"); return; }
+        if (uwb_ds_responder_init() != UWB_OK) {
+            printf("[RNG] Init FAIL\r\n");
+            can_diag_send_error(CAN_ERR_UWB, CAN_ERR_UWB_ID);
+            return;
+        }
         rng_inited = 1;
         printf("[RNG] Listening for STM32...\r\n");
     }
 
-    int ret = uwb_ds_responder_poll(&dist);
+    ret = uwb_ds_responder_poll(&dist);
     if (ret == 1) {
         rng_cnt++;
+        rng_fail_cnt = 0;  /* 成功则清零失败计数 */
         gd_eval_led_toggle(LED2);
         printf("[%lu] dist=%.3f m\r\n", (unsigned long)rng_cnt, dist);
         can_diag_send_ranging((float)dist);
@@ -176,6 +213,21 @@ static void mode_ranging(void)
         if (g_parking_brake && g_key_distance > 5.0f) {
             can_diag_send_vehicle_cmd(VEHICLE_CMD_STOP);
             printf("[LOGIC] STOP: parking brake + dist>5m\r\n");
+        }
+    } else {
+        /* UWB 通信失败 */
+        rng_fail_cnt++;
+        /* 连续失败10次 → 报告错误 */
+        if (rng_fail_cnt == 10) {
+            can_diag_send_error(CAN_ERR_UWB, CAN_ERR_UWB_ID);
+            g_system_status = 1;
+            printf("[RNG] !! UWB comm fail, reported to CAN\r\n");
+        }
+        /* 连续失败30次 → 尝试重新初始化 */
+        if (rng_fail_cnt >= 30) {
+            printf("[RNG] Reinit UWB...\r\n");
+            rng_inited = 0;
+            rng_fail_cnt = 0;
         }
     }
 }
@@ -251,11 +303,11 @@ static void main_loop(void)
             { unsigned char *p = ESP8266_GetIPD(0); if (p) OneNet_RevPro(p); }
         }
 
-        /* ── 按键 ── */
+        /* ── 按键 (每次循环都检测) ── */
         key1_poll();
         key2_poll();
-        key3_poll();  /* 刹车 */
-        key4_poll();  /* 手刹 */
+        key3_poll();
+        key4_poll();
 
         /* ── BLE 连接状态 ── */
         g_ble_connected = ble_is_connected();
@@ -272,10 +324,13 @@ static void main_loop(void)
             printf("[LOGIC] START: car lock + brake\r\n");
         }
 
+        /* ── 快速UWB检测 (每2秒) ── */
+        quick_uwb_check();
+
         /* ── 当前模式 ── */
         if (g_mode == MODE_RANGING) mode_ranging(); else mode_radar();
 
-        /* ── 健康检测 ── */
+        /* ── 健康检测 (每30秒) ── */
         health_check();
 
         delay_ms(50);
