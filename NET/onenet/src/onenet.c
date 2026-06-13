@@ -138,39 +138,51 @@ _Bool OneNet_DevLink(void)
     char authorization_buf[160]; 
     _Bool status = 1;
 	
-    // 1. ����������� Token (��Чʱ������Ϊ 1956499200��������Ч)
-	OneNET_Authorization("2018-10-31", PROID, 1956499200, ACCESS_KEY, DEVICE_NAME, authorization_buf, sizeof(authorization_buf), 0);
+    printf("[MQTT] DevLink start\r\n");
 	
-    // 2. ��װ MQTT �� CONNECT ����
+    // 1. 生成 Token
+	OneNET_Authorization("2018-10-31", PROID, 1956499200, ACCESS_KEY, DEVICE_NAME, authorization_buf, sizeof(authorization_buf), 0);
+    printf("[MQTT] Token generated\r\n");
+	
+    // 2. 构造 MQTT CONNECT 包
 	if(MQTT_PacketConnect(PROID, authorization_buf, DEVICE_NAME, 256, 1, MQTT_QOS_LEVEL0, NULL, NULL, 0, &mqttPacket) == 0)
 	{
-        UsartPrintf(USART_DEBUG, "--> ������ƽ̨���� MQTT ��¼�����...\r\n");
+        printf("[MQTT] CONNECT packet ready, len=%d\r\n", mqttPacket._len);
+        printf("[MQTT] Sending to platform...\r\n");
 		ESP8266_SendData(mqttPacket._data, mqttPacket._len);			
 		
-        // 3. �����ȴ�ƽ̨�·��� CONNACK �ظ��� (���ȴ�Լ 1.25��)
+        // 3. 等待 CONNACK
+        printf("[MQTT] Waiting for CONNACK...\r\n");
 		dataPtr = ESP8266_GetIPD(250);									
 		if(dataPtr != NULL)
 		{
+            printf("[MQTT] Response received\r\n");
 			if(MQTT_UnPacketRecv(dataPtr) == MQTT_PKT_CONNACK)
 			{
-                // 4. �����ظ�����״̬�� (��ɾ�����������Ϣ)
 				switch(MQTT_UnPacketConnectAck(dataPtr))
 				{
-					case 0: UsartPrintf(USART_DEBUG, "Tips: ��¼�ɹ�\r\n"); status = 0; break;
-					default: UsartPrintf(USART_DEBUG, "ERR: ��¼ʧ��\r\n"); break;
+					case 0: printf("[MQTT] Login OK!\r\n"); status = 0; break;
+					default: printf("[MQTT] Login FAILED!\r\n"); break;
 				}
 			}
+			else
+			{
+                printf("[MQTT] Not CONNACK, type=%d\r\n", MQTT_UnPacketRecv(dataPtr));
+			}
+		}
+		else
+		{
+            printf("[MQTT] No response (timeout)\r\n");
 		}
         
-        // 5. �ͷű����ڴ棬��ֹ�ڴ�й©
-		MQTT_DeleteBuffer(&mqttPacket);								
+        MQTT_DeleteBuffer(&mqttPacket);								
 	}
     else
     {
-        UsartPrintf(USART_DEBUG, "ERR: MQTT ����ڴ����ʧ�ܣ�\r\n");
+        printf("[MQTT] PacketConnect FAILED\r\n");
     }
     
-	return status;
+    return status;
 }
 
 /*

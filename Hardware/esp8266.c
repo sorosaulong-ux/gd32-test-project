@@ -51,16 +51,20 @@ static int ESP8266_WaitRecive(void)
 int ESP8266_SendCmd(char *cmd, char *res)
 {
     unsigned char timeOut = 200;
+    printf("[ESP] TX: %.20s...\r\n", cmd);
     Usart_SendString(0, (unsigned char *)cmd, strlen(cmd));
     while (timeOut--) {
         if (ESP8266_WaitRecive() == REV_OK) {
+            printf("[ESP] RX: %s\r\n", esp8266_buf);
             if (strstr((const char *)esp8266_buf, res) != NULL) {
                 ESP8266_Clear();
+                printf("[ESP] OK (expect: %s)\r\n", res);
                 return 0;
             }
         }
         delay_ms(10);
     }
+    printf("[ESP] TIMEOUT (expect: %s)\r\n", res);
     return 1;
 }
 
@@ -81,12 +85,14 @@ unsigned char *ESP8266_GetIPD(unsigned short timeOut)
         if (ESP8266_WaitRecive() == REV_OK) {
             ptrIPD = strstr((char *)esp8266_buf, "IPD,");
             if (ptrIPD != NULL) {
+                printf("[ESP] IPD received\r\n");
                 ptrIPD = strchr(ptrIPD, ':');
                 return (ptrIPD != NULL) ? (unsigned char *)(ptrIPD + 1) : NULL;
             }
         }
         delay_ms(5);
     } while (timeOut--);
+    printf("[ESP] GetIPD TIMEOUT\r\n");
     return NULL;
 }
 
@@ -220,35 +226,43 @@ void wifi_sm_tick(void)
 
             switch (prev) {
             case WIFI_SM_CWMODE:
+                printf("[WiFi] Step: CWMODE\r\n");
                 esp8266_cmd_send("AT+CWMODE=1\r\n", "OK");
                 sm_next(WIFI_SM_CWDHCP);
                 break;
             case WIFI_SM_CWDHCP:
+                printf("[WiFi] Step: CWDHCP\r\n");
                 esp8266_cmd_send("AT+CWDHCP=1,1\r\n", "OK");
                 sm_next(WIFI_SM_CWJAP);
                 break;
             case WIFI_SM_CWJAP:
+                printf("[WiFi] Step: CWJAP (WiFi connect)\r\n");
                 esp8266_cmd_send(ESP8266_WIFI_INFO, "GOT IP");
                 sm_next(WIFI_SM_TCP);
                 break;
             case WIFI_SM_TCP:
+                printf("[WiFi] Step: TCP connect OneNET\r\n");
                 esp8266_cmd_send(ESP8266_ONENET_TCP, "CONNECT");
                 sm_next(WIFI_SM_MQTT_CONNECT);
                 break;
             case WIFI_SM_MQTT_CONNECT:
+                printf("[WiFi] Step: MQTT connect\r\n");
                 if (OneNet_DevLink() == 0) {
                     sm_next(WIFI_SM_MQTT_SUBSCRIBE);
                 } else {
                     sm_retry++;
                     if (sm_retry > SM_RETRY_MAX) {
+                        printf("[WiFi] MQTT failed, DEAD\r\n");
                         sm_next(WIFI_SM_DEAD);
                         can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
                     } else {
+                        printf("[WiFi] MQTT retry %d\r\n", sm_retry);
                         sm_next(WIFI_SM_TCP);
                     }
                 }
                 break;
             case WIFI_SM_MQTT_SUBSCRIBE:
+                printf("[WiFi] Step: MQTT subscribe\r\n");
                 OneNET_Subscribe();
                 sm_next(WIFI_SM_OK);
                 printf("[WiFi] ONLINE\r\n");
