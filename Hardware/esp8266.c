@@ -245,61 +245,31 @@ void wifi_sm_tick(void)
         }
         break;
 
-    /* ── WIFI_SM_TCP: 3s 冷却 → CIPSTART → MQTT 登录 ── */
+    /* ── WIFI_SM_TCP: 阻塞 TCP+MQTT (和 master 裸机完全一样的代码) ── */
     case WIFI_SM_TCP:
     {
+        /* 冷却 3s 可选 (master 没有冷却, 但 3s 可缓解 DHCP 竞争) */
         int32_t elapsed = (int32_t)(now - sm_step_ms);
+        if (elapsed < 3000) return;
 
-        /* Phase 1: 冷却不足 3s → 啥也不做 */
-        if (!cmd_active && elapsed < 3000)
-            return;
+        /* ↓ 以下和 master 裸机完全一致 ↓ */
 
-        /* Phase 2: 冷却结束, 发 CIPSTART */
-        if (!cmd_active && elapsed >= 3000) {
-            ESP8266_Clear();
-            esp8266_cmd_send(ESP8266_ONENET_TCP, "CONNECT");
-            return;  /* 等下一 tick 看结果 */
+        printf("[WiFi] TCP connecting (master-verified)...\r\n");
+        while (ESP8266_SendCmd(ESP8266_ONENET_TCP, "CONNECT"))
+            delay_ms(500);
+
+        printf("[WiFi] Device login...\r\n");
+        while (OneNet_DevLink()) {
+            ESP8266_SendCmd(ESP8266_ONENET_TCP, "CONNECT");
+            delay_ms(500);
         }
 
-        /* Phase 3: 等 CIPSTART 回复 */
-        {
-            int rc = esp8266_cmd_done();
-            if (rc == 0) return;
-
-            if (rc == -1) {
-                printf("[WiFi] CIPSTART failed, retry in 3s\r\n");
-                if (++sm_retry > SM_RETRY_MAX) {
-                    sm_next(WIFI_SM_DEAD);
-                    can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
-                    return;
-                }
-                /* ★ 回 Phase 1: 重置冷却计时, 3s 后再发 */
-                sm_step_ms = now;
-                return;
-            }
-        }
-
-        /* Phase 4: CIPSTART 成功 → MQTT 登录 */
-        sm_retry = 0;
-        ESP8266_Clear();
-        printf("[WiFi] TCP OK → MQTT login\r\n");
-        if (OneNet_DevLink() == 0) {
-            sm_next(WIFI_SM_MQTT_SUBSCRIBE);
-        } else {
-            printf("[WiFi] MQTT login failed, retry in 3s\r\n");
-            if (++sm_retry > SM_RETRY_MAX)
-                sm_next(WIFI_SM_DEAD);
-            sm_step_ms = now;  /* back to Phase 1 cooldown */
-        }
-        break;
-    }
-
-    case WIFI_SM_MQTT_SUBSCRIBE:
         OneNET_Subscribe();
         sm_next(WIFI_SM_OK);
         printf("[WiFi] ONLINE\r\n");
         can_diag_send_error(0, 0);
         break;
+    }
 
     case WIFI_SM_OK:
         break;
@@ -317,7 +287,6 @@ resend:
     case WIFI_SM_CWMODE:  esp8266_cmd_send("AT+CWMODE=1\r\n", "OK"); break;
     case WIFI_SM_CWDHCP: esp8266_cmd_send("AT+CWDHCP=1,1\r\n", "OK"); break;
     case WIFI_SM_CWJAP:  esp8266_cmd_send(ESP8266_WIFI_INFO, "GOT IP"); break;
-    case WIFI_SM_TCP:    esp8266_cmd_send(ESP8266_ONENET_TCP, "CONNECT"); break;
     default: break;
     }
 }
