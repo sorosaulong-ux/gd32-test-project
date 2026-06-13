@@ -251,7 +251,7 @@ void wifi_sm_tick(void)
             case WIFI_SM_CWDHCP:
                 printf("[WiFi] Step: CWDHCP OK → CWJAP\r\n");
                 esp8266_cmd_send(ESP8266_WIFI_INFO, "GOT IP");
-                /* 保持在 WIFI_SM_CWJAP 等待 GOT IP */
+                sm_next(WIFI_SM_CWJAP);
                 break;
             case WIFI_SM_CWJAP:
                 printf("[WiFi] Step: CWJAP OK → TCP\r\n");
