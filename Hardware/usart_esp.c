@@ -59,14 +59,20 @@ void usart3_esp_init(uint32_t baudrate)
     printf("[ESP] UART3 init OK @ %lu baud\r\n", (unsigned long)baudrate);
 }
 
-/* ─── Send raw bytes (blocking, per-byte) ─── */
+/* ─── Send raw bytes (blocking, per-byte, with timeout) ─── */
 void Usart_SendString(uint32_t periph, unsigned char *str, unsigned short len)
 {
     (void)periph;  /* always UART3 for ESP8266 */
     for (unsigned short i = 0; i < len; i++) {
         linflexd_uart_byte_transmit(EVAL_COMB, str[i]);
-        while (RESET == linflexd_uart_flag_get(EVAL_COMB,
-            LINFLEXD_UART_FLAG_DTF_TFF));
+        /* 等待发送完成，带超时保护 */
+        uint32_t timeout = 100000;
+        while (RESET == linflexd_uart_flag_get(EVAL_COMB, LINFLEXD_UART_FLAG_DTF_TFF)) {
+            if (--timeout == 0) {
+                printf("[UART] TX timeout at byte %d\r\n", i);
+                return;
+            }
+        }
         linflexd_uart_flag_clear(EVAL_COMB, LINFLEXD_UART_FLAG_DTF_TFF);
     }
 }
