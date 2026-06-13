@@ -1,22 +1,23 @@
 /*!
  *  \file    delay.h
- *  \brief   Delay wrapper — FreeRTOS 下用 vTaskDelay, 裸机用 delay_1ms
+ *  \brief   Delay wrapper — 裸机 delay_1ms/delay_1us
+ *
+ *  ESP8266 SendCmd/GetIPD 依赖 busy-wait 轮询 UART,
+ *  不能用 vTaskDelay (yield 会丢失 AT 命令时序)。
+ *  业务任务用 vTaskDelay 直接调 FreeRTOS API。
  */
 
 #ifndef __DELAY_H
 #define __DELAY_H
 
-#include "FreeRTOS.h"
-#include "task.h"
 #include "systick.h"
 #include "uwb_port.h"
 
-/* ── FreeRTOS 运行时用 vTaskDelay (yield CPU) ── */
 #define delay_init()
-#define delay_ms(x)       vTaskDelay(pdMS_TO_TICKS(x))
-#define delay_us(x)       vTaskDelay(pdMS_TO_TICKS(max(1U,(x)/1000U)))
-#define DelayMs(x)        vTaskDelay(pdMS_TO_TICKS(x))
-#define DelayXms(x)       vTaskDelay(pdMS_TO_TICKS(x))
-#define DelayUs(x)        vTaskDelay(pdMS_TO_TICKS(max(1U,(x)/1000U)))
+#define delay_ms(x)       delay_1ms(x)
+#define delay_us(x)       delay_1us(x)
+#define DelayMs(x)        delay_1ms(x)
+#define DelayXms(x)       delay_1ms(x)
+#define DelayUs(x)        delay_1us(x)
 
 #endif
