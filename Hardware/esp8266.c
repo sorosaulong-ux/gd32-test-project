@@ -237,7 +237,6 @@ void wifi_sm_tick(void)
                 break;
             case WIFI_SM_MQTT_CONNECT:
                 if (OneNet_DevLink() == 0) {
-                    esp8266_cmd_send("__SUBSCRIBE__", "OK");  /* dummy */
                     sm_next(WIFI_SM_MQTT_SUBSCRIBE);
                 } else {
                     sm_retry++;
@@ -245,7 +244,7 @@ void wifi_sm_tick(void)
                         sm_next(WIFI_SM_DEAD);
                         can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
                     } else {
-                        sm_next(WIFI_SM_TCP);  /* 回退到 TCP 重来 */
+                        sm_next(WIFI_SM_TCP);
                     }
                 }
                 break;
@@ -253,7 +252,7 @@ void wifi_sm_tick(void)
                 OneNET_Subscribe();
                 sm_next(WIFI_SM_OK);
                 printf("[WiFi] ONLINE\r\n");
-                can_diag_send_error(0, 0);  /* 清除错误 */
+                can_diag_send_error(0, 0);
                 break;
             default:
                 break;

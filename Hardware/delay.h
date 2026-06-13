@@ -1,23 +1,22 @@
 /*!
  *  \file    delay.h
- *  \brief   Delay compatibility wrapper — maps GD32F3 names → GD32A7
- *
- *  GD32F3:  delay_ms(), delay_us(), DelayMs(), DelayXms()
- *  GD32A7:  delay_1ms(), delay_1us()  (from systick.h / uwb_port.h)
+ *  \brief   Delay wrapper — FreeRTOS 下用 vTaskDelay, 裸机用 delay_1ms
  */
 
 #ifndef __DELAY_H
 #define __DELAY_H
 
-#include "systick.h"      /* delay_1ms() */
-#include "uwb_port.h"     /* delay_1us() */
+#include "FreeRTOS.h"
+#include "task.h"
+#include "systick.h"
+#include "uwb_port.h"
 
-/* ---- map old GD32F3 names to GD32A7 ---- */
-#define delay_init()      /* no-op on GD32A7 — SysTick already configured */
-#define delay_ms(x)       delay_1ms(x)
-#define delay_us(x)       delay_1us(x)
-#define DelayMs(x)        delay_1ms(x)
-#define DelayXms(x)       delay_1ms(x)
-#define DelayUs(x)        delay_1us(x)
+/* ── FreeRTOS 运行时用 vTaskDelay (yield CPU) ── */
+#define delay_init()
+#define delay_ms(x)       vTaskDelay(pdMS_TO_TICKS(x))
+#define delay_us(x)       vTaskDelay(pdMS_TO_TICKS(max(1U,(x)/1000U)))
+#define DelayMs(x)        vTaskDelay(pdMS_TO_TICKS(x))
+#define DelayXms(x)       vTaskDelay(pdMS_TO_TICKS(x))
+#define DelayUs(x)        vTaskDelay(pdMS_TO_TICKS(max(1U,(x)/1000U)))
 
-#endif /* __DELAY_H */
+#endif
