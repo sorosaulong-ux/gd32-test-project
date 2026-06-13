@@ -73,14 +73,20 @@ void ESP8266_SendData(unsigned char *data, unsigned short len)
     char cmdBuf[32];
     ESP8266_Clear();
     snprintf(cmdBuf, sizeof(cmdBuf), "AT+CIPSEND=%d\r\n", (int)len);
+    printf("[ESP] SendData: len=%d\r\n", len);
     if (!ESP8266_SendCmd(cmdBuf, ">")) {
+        printf("[ESP] SendData: sending %d bytes...\r\n", len);
         Usart_SendString(0, data, len);
+        printf("[ESP] SendData: sent OK\r\n");
+    } else {
+        printf("[ESP] SendData: AT+CIPSEND failed\r\n");
     }
 }
 
 unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 {
     char *ptrIPD = NULL;
+    printf("[ESP] GetIPD: waiting (timeout=%d)...\r\n", timeOut);
     do {
         if (ESP8266_WaitRecive() == REV_OK) {
             ptrIPD = strstr((char *)esp8266_buf, "IPD,");
