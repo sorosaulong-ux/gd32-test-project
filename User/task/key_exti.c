@@ -21,32 +21,37 @@ void key_exti_init(void)
     rcu_periph_clock_enable(RCU_GPIOL);
     rcu_periph_clock_enable(RCU_SYSCFG);
 
-    prpu_periph_unlock(PRPU_GPIOL);
+    prpu_periph_unlock(PRPU_GPIOL);  /* GPIOL 必须解锁才能写寄存器 */
 
-    /* ── KEY1: PC13 → EXTI13 ── */
+    /* ★ 1. GPIO 输入模式 (必须在 EXTI 配置之前!) */
+    gpio_mode_set(GPIOC, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_13);  /* KEY1 */
+    gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_3);   /* KEY2 */
+    gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_4);   /* KEY3 */
+    gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_5);   /* KEY4 */
+
+    /* ★ 2. EXTI 线路由 */
     syscfg_exti_line_config(EXTI_SOURCE_GPIOC, EXTI_SOURCE_PIN13);
-    exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
-    exti_interrupt_flag_clear(EXTI_13);
-
-    /* ── KEY2: GPIOL.3 → EXTI3 (BOTH edges — 长按检测需要按下+释放) ── */
     syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN3);
-    exti_init(EXTI_3, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
-    exti_interrupt_flag_clear(EXTI_3);
-
-    /* ── KEY3: GPIOL.4 → EXTI4 ── */
     syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN4);
-    exti_init(EXTI_4, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
-    exti_interrupt_flag_clear(EXTI_4);
-
-    /* ── KEY4: GPIOL.5 → EXTI5 ── */
     syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN5);
-    exti_init(EXTI_5, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
+
+    /* ★ 3. EXTI 触发配置 */
+    exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_FALLING);   /* KEY1: 按下 */
+    exti_init(EXTI_3,  EXTI_INTERRUPT, EXTI_TRIG_BOTH);      /* KEY2: 按下+释放 */
+    exti_init(EXTI_4,  EXTI_INTERRUPT, EXTI_TRIG_FALLING);   /* KEY3: 按下 */
+    exti_init(EXTI_5,  EXTI_INTERRUPT, EXTI_TRIG_FALLING);   /* KEY4: 按下 */
+
+    /* ★ 4. 清除 EXTI 挂起标志 */
+    exti_interrupt_flag_clear(EXTI_13);
+    exti_interrupt_flag_clear(EXTI_3);
+    exti_interrupt_flag_clear(EXTI_4);
     exti_interrupt_flag_clear(EXTI_5);
 
-    nvic_irq_enable(EXTI10_15_IRQn, 5, 0);
-    nvic_irq_enable(EXTI3_IRQn, 5, 0);
-    nvic_irq_enable(EXTI4_IRQn, 5, 0);
-    nvic_irq_enable(EXTI5_9_IRQn, 5, 0);
+    /* ★ 5. NVIC 使能 */
+    nvic_irq_enable(EXTI10_15_IRQn, 5, 0);  /* KEY1 PC13 + UWB2 PI10 */
+    nvic_irq_enable(EXTI3_IRQn, 5, 0);      /* KEY2 GPIOL.3 */
+    nvic_irq_enable(EXTI4_IRQn, 5, 0);      /* KEY3 GPIOL.4 */
+    nvic_irq_enable(EXTI5_9_IRQn, 5, 0);    /* KEY4 GPIOL.5 + UWB1 PI8 */
 
     printf("[KEY] EXTI init OK (PC13/PL3/PL4/PL5)\r\n");
 }
