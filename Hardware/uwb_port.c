@@ -193,12 +193,12 @@ void port_EnableEXT_IRQ(void)
     syscfg_exti_line_config(EXTI_SOURCE_GPIOI, EXTI_SOURCE_PIN8);
     exti_init(EXTI_8, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
     exti_interrupt_flag_clear(EXTI_8);
-    nvic_irq_enable(EXTI5_9_IRQn, 1, 0);
+    nvic_irq_enable(EXTI5_9_IRQn, 5, 0);  /* >= configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY */
     /* UWB2: PI.10 */
     syscfg_exti_line_config(EXTI_SOURCE_GPIOI, EXTI_SOURCE_PIN10);
     exti_init(EXTI_10, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
     exti_interrupt_flag_clear(EXTI_10);
-    nvic_irq_enable(EXTI10_15_IRQn, 1, 0);
+    nvic_irq_enable(EXTI10_15_IRQn, 5, 0);  /* >= configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY */
 }
 
 uint32_t port_GetEXT_IRQStatus(void) { return 1; }

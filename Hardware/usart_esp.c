@@ -54,7 +54,8 @@ void usart3_esp_init(uint32_t baudrate)
 
     /* Enable RX interrupt (DRIE = data reception interrupt) */
     LINFLEXD_UART_LINIER(EVAL_COMB) |= LINFLEXD_UART_LINIER_DRIE;
-    nvic_irq_enable(LINFlexD3_IRQn, 1, 0);
+    /* 优先级必须 >= configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (2) */
+    nvic_irq_enable(LINFlexD3_IRQn, 5, 0);
 
     printf("[ESP] UART3 init OK @ %lu baud\r\n", (unsigned long)baudrate);
 }
