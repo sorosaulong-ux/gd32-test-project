@@ -236,6 +236,9 @@ void wifi_sm_tick(void)
         {
             wifi_sm_state_t prev = sm_state;
 
+            /* 清除旧数据，确保新命令干净 */
+            ESP8266_Clear();
+
             switch (prev) {
             case WIFI_SM_CWMODE:
                 printf("[WiFi] Step: CWMODE\r\n");
