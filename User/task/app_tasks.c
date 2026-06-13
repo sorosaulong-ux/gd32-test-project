@@ -135,6 +135,7 @@ void vTaskUWB(void *pvParameters)
             if (!rad_inited) {
                 if (uwb_radar_init() != UWB_OK) {
                     printf("[RADAR] Init FAIL\r\n");
+                    taskYIELD();                              /* 让出 CPU 给按键/WiFi */
                     vTaskDelay(pdMS_TO_TICKS(2000));
                     continue;
                 }
@@ -168,6 +169,7 @@ void vTaskUWB(void *pvParameters)
             if (!rng_inited) {
                 if (uwb_ds_responder_init() != UWB_OK) {
                     printf("[RNG] Init FAIL\r\n");
+                    taskYIELD();
                     vTaskDelay(pdMS_TO_TICKS(2000));
                     continue;
                 }
@@ -328,7 +330,7 @@ void app_tasks_init(void)
     printf("[SYS] Buzzer+CAN ready\r\n\r\n");
 
     /* ── 创建任务 ── */
-    xTaskCreate(vTaskCanTX, "CANTX", 256, NULL, tskIDLE_PRIORITY + 4, NULL);
+    xTaskCreate(vTaskCanTX, "CANTX", 256, NULL, TASK_PRIO_CAN, NULL);
     xTaskCreate(vTaskUWB,   "UWB",   TASK_STACK_UWB,  NULL, TASK_PRIO_UWB,  &xTaskUWB_Handle);
     xTaskCreate(vTaskWiFi,  "WiFi",  TASK_STACK_WIFI, NULL, TASK_PRIO_WIFI, &xTaskWiFi_Handle);
     xTaskCreate(vTaskKey,   "Key",   TASK_STACK_KEY,  NULL, TASK_PRIO_KEY,  &xTaskKey_Handle);

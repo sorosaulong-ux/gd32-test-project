@@ -13,9 +13,10 @@
 #include <stdint.h>
 
 /* ── 任务优先级 ── */
-#define TASK_PRIO_UWB           ( tskIDLE_PRIORITY + 5 )  /* 最高 */
-#define TASK_PRIO_WIFI          ( tskIDLE_PRIORITY + 3 )
-#define TASK_PRIO_KEY           ( tskIDLE_PRIORITY + 2 )
+#define TASK_PRIO_KEY           ( tskIDLE_PRIORITY + 5 )  /* 最高 — 按键响应优先 */
+#define TASK_PRIO_CAN           ( tskIDLE_PRIORITY + 4 )  /* CAN 不丢帧 */
+#define TASK_PRIO_UWB           ( tskIDLE_PRIORITY + 3 )
+#define TASK_PRIO_WIFI          ( tskIDLE_PRIORITY + 2 )
 #define TASK_PRIO_BLE           ( tskIDLE_PRIORITY + 1 )
 
 /* ── 任务栈大小 ── */
