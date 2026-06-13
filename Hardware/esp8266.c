@@ -42,8 +42,20 @@ void ESP8266_Clear(void)
 
 static int ESP8266_WaitRecive(void)
 {
-    if (esp8266_cnt == 0)       return REV_WAIT;
-    if (esp8266_cnt == esp8266_cntPre) { esp8266_cnt = 0; return REV_OK; }
+    static uint32_t stable_ms;
+
+    if (esp8266_cnt == 0)       { stable_ms = 0; return REV_WAIT; }
+    if (esp8266_cnt == esp8266_cntPre) {
+        /* 等待 2ms 无新数据 → 确认接收完毕 (FreeRTOS 多任务防抖) */
+        if (stable_ms == 0) stable_ms = uwb_tick_get();
+        if (uwb_tick_get() - stable_ms >= 2U) {
+            stable_ms = 0;
+            esp8266_cnt = 0;
+            return REV_OK;
+        }
+        return REV_WAIT;
+    }
+    stable_ms = 0;
     esp8266_cntPre = esp8266_cnt;
     return REV_WAIT;
 }
