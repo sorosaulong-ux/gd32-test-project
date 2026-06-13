@@ -245,15 +245,9 @@ void wifi_sm_tick(void)
         }
         break;
 
-    /* ── WIFI_SM_TCP: 阻塞 TCP+MQTT (和 master 裸机完全一样的代码) ── */
+    /* ── WIFI_SM_TCP: 完全复制 master 裸机的阻塞 TCP+MQTT ── */
     case WIFI_SM_TCP:
     {
-        /* 冷却 3s 可选 (master 没有冷却, 但 3s 可缓解 DHCP 竞争) */
-        int32_t elapsed = (int32_t)(now - sm_step_ms);
-        if (elapsed < 3000) return;
-
-        /* ↓ 以下和 master 裸机完全一致 ↓ */
-
         printf("[WiFi] TCP connecting (master-verified)...\r\n");
         while (ESP8266_SendCmd(ESP8266_ONENET_TCP, "CONNECT"))
             delay_ms(500);
