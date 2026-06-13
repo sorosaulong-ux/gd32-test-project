@@ -25,6 +25,15 @@
 #define TASK_STACK_KEY          ( 256 )
 #define TASK_STACK_BLE          ( 256 )
 
+/* ── 模式 ── */
+typedef enum { MODE_RANGING, MODE_RADAR } sys_mode_t;
+
+/* ── 全局变量 (ISR 共享) ── */
+extern volatile sys_mode_t g_mode;
+extern uint8_t g_brake;
+extern uint8_t g_parking_brake;
+extern uint8_t g_car_lock;
+
 /* ── CAN TX 队列 ── */
 #define CAN_TX_QUEUE_LEN        16
 

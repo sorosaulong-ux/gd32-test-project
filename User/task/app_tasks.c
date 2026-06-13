@@ -45,9 +45,8 @@ uint8_t g_parking_brake;
 uint8_t g_system_status;
 uint8_t g_ble_connected;
 
-/* ── 模式切换 (KEY2 长按) ── */
-typedef enum { MODE_RANGING, MODE_RADAR } sys_mode_t;
-static volatile sys_mode_t g_mode = MODE_RANGING;
+/* ── 模式切换 (KEY2) ── */
+volatile sys_mode_t g_mode = MODE_RANGING;
 
 /* ====================================================================
  *  vTaskCanTX — 从队列取 CAN 帧并发送
