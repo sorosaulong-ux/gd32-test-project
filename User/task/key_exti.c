@@ -17,7 +17,7 @@
 #include <stdio.h>
 
 /* ── 外部变量 ── */
-extern sys_mode_t g_mode;
+extern volatile sys_mode_t g_mode;
 extern uint8_t g_brake;
 extern uint8_t g_parking_brake;
 
@@ -92,7 +92,6 @@ void EXTI3_IRQHandler(void)
 
         static TickType_t last;
         if (debounce(&last)) {
-            extern sys_mode_t g_mode;
             g_mode = (g_mode == MODE_RADAR) ? MODE_RANGING : MODE_RADAR;
         }
     }
