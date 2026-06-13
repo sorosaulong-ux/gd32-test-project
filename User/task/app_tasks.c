@@ -263,11 +263,16 @@ void vTaskKey(void *pvParameters)
     {
         if (xSemaphoreTake(xKey_Semaphore, portMAX_DELAY) == pdTRUE)
         {
-            vTaskDelay(pdMS_TO_TICKS(30)); /* 消抖 */
+            vTaskDelay(pdMS_TO_TICKS(50)); /* 消抖 50ms */
+            gd_eval_led_toggle(LED2);       /* LED2 翻转 = ISR 触发指示灯 */
+
+            /* 重读确认 (消抖后) */
+            uint8_t k1 = gpio_input_bit_get(GPIOC, GPIO_PIN_13);
 
             /* KEY1 (PC13) — 蜂鸣器 */
-            if (RESET == gpio_input_bit_get(GPIOC, GPIO_PIN_13)) {
+            if (RESET == k1) {
                 BUZZER_Set(BUZZER_Status == BUZZER_ON ? BUZZER_OFF : BUZZER_ON);
+                printf("[KEY] Buzzer toggle\r\n");
             }
 
             /* KEY2 (GPIOL.3) — 模式切换 */
