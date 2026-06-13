@@ -140,15 +140,19 @@ int esp8266_cmd_done(void)
     /* Check RX buffer */
     if (ESP8266_WaitRecive() == REV_OK) {
         cmd_active = 0;
+        printf("[ESP] cmd_done RX: %s\r\n", esp8266_buf);
         if (strstr((const char *)esp8266_buf, cmd_expect) != NULL) {
             ESP8266_Clear();
+            printf("[ESP] cmd_done OK (expect: %s)\r\n", cmd_expect);
             return 1;  /* success */
         }
+        printf("[ESP] cmd_done MISS (expect: %s)\r\n", cmd_expect);
         return -1; /* wrong response */
     }
 
     if (uwb_tick_get() - cmd_sent_ms > CMD_TIMEOUT_MS) {
         cmd_active = 0;
+        printf("[ESP] cmd_done TIMEOUT (expect: %s)\r\n", cmd_expect);
         return -1; /* timeout */
     }
     return 0;  /* still waiting */
@@ -208,6 +212,8 @@ void wifi_sm_tick(void)
         {
             int rc = esp8266_cmd_done();
             if (rc == 0) return;  /* 还在等 */
+
+            printf("[WiFi] Step %d result: %d\r\n", (int)sm_state, rc);
 
             if (rc == -1) {
                 /* 超时或错误 → 重试 */
