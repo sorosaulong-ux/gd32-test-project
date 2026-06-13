@@ -285,14 +285,6 @@ void wifi_sm_tick(void)
             default:
                 break;
             }
-
-            if (sm_state == prev) {
-                /* 失败留在原状态 → 如果超时太长也切 DEAD */
-                if ((int32_t)(now - sm_step_ms) > SM_STEP_TIMEOUT * 5) {
-                    printf("[WiFi] Global timeout, DEAD\r\n");
-                    sm_next(WIFI_SM_DEAD);
-                }
-            }
         }
         break;
 
