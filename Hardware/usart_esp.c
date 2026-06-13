@@ -60,26 +60,15 @@ void usart3_esp_init(uint32_t baudrate)
     printf("[ESP] UART3 init OK @ %lu baud\r\n", (unsigned long)baudrate);
 }
 
-/* ─── Send raw bytes (blocking, per-byte, with timeout) ─── */
+/* ─── Send raw bytes (blocking, per-byte) ─── */
 void Usart_SendString(uint32_t periph, unsigned char *str, unsigned short len)
 {
     (void)periph;
-    printf("[UART] SendString: len=%d\r\n", len);
     for (unsigned short i = 0; i < len; i++) {
-        if (i == 0 || i == len - 1) {
-            printf("[UART] Byte[%d]=0x%02X\r\n", i, str[i]);
-        }
         linflexd_uart_byte_transmit(EVAL_COMB, str[i]);
-        uint32_t timeout = 100000;
-        while (RESET == linflexd_uart_flag_get(EVAL_COMB, LINFLEXD_UART_FLAG_DTF_TFF)) {
-            if (--timeout == 0) {
-                printf("[UART] TX timeout at byte %d\r\n", i);
-                return;
-            }
-        }
+        while (RESET == linflexd_uart_flag_get(EVAL_COMB, LINFLEXD_UART_FLAG_DTF_TFF));
         linflexd_uart_flag_clear(EVAL_COMB, LINFLEXD_UART_FLAG_DTF_TFF);
     }
-    printf("[UART] SendString done\r\n");
 }
 
 /* ─── UART3 RX interrupt handler ─── */
