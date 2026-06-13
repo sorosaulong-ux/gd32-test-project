@@ -1,309 +1,60 @@
-================================================================================
-  GD32A7 车载 UWB 雷达 + CAN 诊断 项目上下文
-  生成日期: 2026-06-10
-  Git: master 分支, commit c93048c
-  GitHub: git@github.com:sorosaulong-ux/gd32-test-project.git
-================================================================================
-
-一、项目概述
-============
-基于 GD32A7 + DW3000 UWB 模块构建车内遗留人员（儿童/宠物）检测系统。
-采用 bistatic（双站）UWB 雷达方案，结合边缘机器学习（逻辑回归）实时判断
-车内是否有人，通过 CAN 总线上报中控单元。
-
-三个 MCU 分工:
-  GD32A7  = 车载终端 (UWB雷达 + ML推理 + CAN上报 + WiFi/OneNET云)
-  GD32F3  = 中控 (CAN接收 + OLED显示 + 蜂鸣器报警)
-  STM32F1 = 钥匙端 (DS-TWR 测距, 独立子系统)
-
-================================================================================
-
-二、硬件平台
-============
-
-GD32A7 (车载):
-  MCU: GD32A712AI, Cortex-M7 @ 160MHz, FPU, 1MB Flash, 160KB SRAM
-  引脚分配:
-    UWB SPI 软件 bit-bang: PE5(MISO) PE6(SCK) PH14(MOSI)
-    UWB1 (TX): PL2(CS) PL0(RST) PI8(IRQ)
-    UWB2 (RX): PB11(CS) PI11(RST) PI10(IRQ)
-    UWB WAKEUP: PB10
-    CAN2: PM2(TX,AF3) PM3(RX,AF8) @ 500kbps → MCP2562FD
-    ESP8266 UART3: PJ7(TX,AF13) PJ8(RX,AF13) @ 115200
-    Debug UART1: PH7(TX) PH8(RX)
-    Buzzer: PB13 (active-low, NPN晶体管驱动)
-    KEY1: PC13 (蜂鸣器切换, 轮询+500ms长按去抖)
-    KEY2: GPIOL.3 (模式切换, PRPU解锁, 轮询)
-    LED1: PE13 (系统就绪)  LED2: PE12  LED3: PE11
-
-GD32F3 (中控):
-  MCU: GD32F303RC, Cortex-M4 @ 120MHz
-  CAN0: PB8(RX) PB9(TX) partial remap, 500kbps
-  OLED: PB6(SCL) PB7(SDA) I2C
-  Buzzer: PB10 (active-low)
-  KEY1: PA1 (EXTI1 中断)
-
-STM32F103 (钥匙):
-  MCU: STM32F103C8T6, Cortex-M3 @ 72MHz
-  HW SPI1: PA5(SCK) PA6(MISO) PA7(MOSI) PA4(CS)
-  DW3000: RST=PB0, IRQ=PB1
-  OLED: I2C
-
-================================================================================
-
-三、文件结构
-============
-
-工程根目录: C:\GD32\Project\test
-Keil 工程文件: test.uvprojx (打开此文件编译 GD32A7)
-
-核心文件:
-  User/main.c                     — 主循环 (三步架构 + 模式切换)
-  Hardware/uwb.h / uwb.c          — UWB 雷达 + DS-TWR 测距
-  Hardware/uwb_port.h / uwb_port.c — 软件 SPI + GPIO 平台层
-  Hardware/ml_predict.h / ml_predict.c — 边缘 ML 推理 (逻辑回归)
-  Hardware/can.h / can.c          — CAN 底层驱动
-  Hardware/can_diag.h / can_diag.c — CAN 诊断协议层
-  Hardware/esp8266.h / esp8266.c   — ESP8266 WiFi 驱动
-  Hardware/usart_esp.h / usart_esp.c — UART3 驱动
-  Hardware/buzzer.h / buzzer.c     — 蜂鸣器 (PB13, active-low)
-  Hardware/key.h / key.c           — KEY1(PC13) + KEY2(GPIOL.3)
-  Hardware/delay.h                 — GD32F3→GD32A7 延时兼容层
-
-库文件:
-  DW3000/                          — Decawave 官方库 (deca_device.c, deca_regs.h)
-  Library/                         — GD32A7xx 标准外设库 (gd32a7xx_*.c/h)
-  NET/CJSON/                       — JSON 解析 (cJSON.c)
-  NET/MQTT/                        — MQTT 协议 (MqttKit.c)
-  NET/onenet/                      — OneNET 平台 (onenet.c, base64.c, hmac_sha1.c)
-
-Python 分析脚本 (py/):
-  train_model.py                   — ★ PC 训练脚本: CSV→窗口化→LR→导出C权重
-  model_weights.h                  — ★ 导出的 ML 权重 (被 MCU include)
-  uwb_recorder.py                  — 串口 CSV 录制器
-  cir_compare.py                   — 空车 vs 有人 CIR 对比分析
-  cir_breath_v2.py                 — FFT 呼吸检测分析
-  cir_breath.py                    — 旧版 FFT 检测 (v1)
-  cir_phase.py / cir_check.py / cir_diff.py — 早期分析脚本
-
-其他子工程:
-  GD32F3中控/                      — GD32F3 完整 Keil 工程
-  STM32发送雷达/                   — STM32F103 DS-TWR Initiator 工程
-  APP/                             — uni-app 移动端
-
-================================================================================
-
-四、UWB Bistatic 雷达
-
-4.1 物理原理
-     UWB1 (TX, 仪表台) → RF 脉冲穿越车厢 → UWB2 (RX, 后排顶灯)
-     有人时增加反射路径 → CIR 幅度上升 + 相位微扰
-
-4.2 关键参数
-     频率: 4 Hz (250ms TX间隔)
-     Channel: 5 (6489.6 MHz)
-     Preamble: PLEN_128, PAC8
-     Data Rate: 6.8 Mbps, SFD: IEEE 4z
-     PRF: 64 MHz, STS: OFF
-     CIR: 128 bins, 每 bin I/Q (24-bit 符号扩展 → int32_t)
-     TX Power: {0x34, 0xfdfdfdfd, 0x0}
-     Antenna Delay: 16385 (TX & RX)
-
-4.3 软件 SPI
-     bb_nop=2  (fast,  ~13 MHz 等效, 业务代码用)
-     bb_nop=12 (slow, ~2 MHz,  初始化和读 ID 用)
-     GPIO 模式切换: 输出推挽 LOW / 输入+PU HIGH (避免开漏 bug)
-
-4.4 CIR 数据结构
-    typedef struct {
-        uint32_t timestamp_ms; uint32_t seq;
-        uint16_t fp_index; uint32_t rx_power;
-        uint32_t fp_power; uint32_t noise;
-        int32_t cir_i[128]; int32_t cir_q[128];
-        char label[32];
-    } uwb_radar_result_t;
-
-4.5 API
-    uwb_radar_init()          — 初始化双模块 (UWB1 TX + UWB2 RX)
-    uwb_radar_scan(res, seq)  — 单次扫描: TX发脉冲→RX收CIR→读诊断
-    uwb_radar_csv(res)        — CSV 输出 (NULL=打印header)
-    uwb_check_id()            — 非破坏性读 UWB2 ID (不reset)
-    uwb_ds_responder_init()   — DS-TWR Responder 初始化 (单UWB2, 配合STM32)
-    uwb_ds_responder_poll()   — 单次 DS-TWR exchange
-
-================================================================================
-
-五、边缘 ML 模型 (核心)
-
-5.1 特征流水线
-    每帧 → 18维瞬时特征 → 环形缓冲 16 帧 → 窗口满后计算 22 维统计量 → 推理
-
-5.2 18 维瞬时特征
-    f[0] = fp_power         (首径功率)
-    f[1] = noise            (噪声均值)
-    f[2] = mag_mean         (128 bin 幅度均值)
-    f[3] = mag_std          (128 bin 幅度标准差)
-    f[4..10] = bin 幅值     {2,8,25,31,63,69,103}
-    f[11..17] = bin 相位    同上 7 个 bin
-
-5.3 22 维窗口统计量 (16帧=4s 非重叠)
-    f[0..3]   = 4 全局均值   (fp_power/noise/mag_mean/mag_std)
-    f[4..7]   = 4 全局标准差 (同上 4 个量)
-    f[8..14]  = 7 bin 幅值标准差
-    f[15..21] = 7 bin 相位循环方差 V=1-R, R=√(∑cos)²+(∑sin)²/N
-
-5.4 模型
-    算法: LogisticRegression (逻辑回归)
-    公式: z = W·x' + b,  p = 1/(1+e^(-z)),  human = (p > 0.5)
-    训练: Python sklearn, StandardScaler + LogisticRegression(C=1.0)
-    导出: model_weights.h → W[22], b, mu[22], sigma[22]
-    性能: 准确率 96.4%, 召回率 100%, FP=1/30
-    MCU: <1µs 推理, ~700B SRAM
-    EMPTY p: 0.00~0.15,  HUMAN p: 0.62~0.97
-
-5.5 训练流程
-    python train_model.py cir_empty.csv cir_human.csv
-    → 自动导出 model_weights.h → 拷贝到 py/ 即可 (已 include 在工程中)
-
-5.6 关键注意事项
-    ★ 训练和推理必须用同一个天线位置, 动了天线必须重新采集+训练
-    ★ 空车和有人数据必须同一位置录制
-
-================================================================================
-
-六、CAN 诊断协议
-
-6.1 物理层
-    CAN2, PM2/PM3, 500kbps
-    PCLK2=80MHz, prescaler=8, tseg1=13, tseg2=6, total_tq=20
-
-6.2 帧定义
-    0x101: Ranging [dist_mm BE32]
-    0x102: Radar   [detected, confidence, 0, 0]   ← ML检测结果
-    0x103: Error   [err_code, sub_code, 0, sig]    ← 系统错误
-    sig=0xAA 故障, sig=0x55 正常, err=0 sub=0 清除
-
-6.3 错误码
-    0x01.01: UWB2 ID 异常
-    0x02.01: WiFi 断连
-    0x03.01: CAN BUS-OFF
-    0x04.01: 系统启动完成
-    0x05.01: MQTT 断连
-    0x00.00: 全部清除
-
-6.4 去重
-    can_diag_send_error() 同一 err+sub 只发一次
-
-================================================================================
-
-七、ESP8266 WiFi + OneNET
-
-7.1 连接
-    UART3 PJ7(TX)/PJ8(RX) @ 115200, AT 命令
-
-7.2 非阻塞状态机
-    INIT_UART→AT→CWMODE→CWDHCP→CWJAP→TCP→MQTT→SUB→OK
-    失败×3→DEAD→60s后重试
-    雷达 0ms 启动, WiFi 后台慢慢连, 互不阻塞
-
-7.3 OneNET
-    MQTT v3.1.1, mqtts.heclouds.com:1883
-    上行: $sys/{pid}/{device}/thing/property/post
-    下行: $sys/{pid}/{device}/thing/property/set
-    设备: PROID=koQ9729Ag8, DEVICE=car1
-    WiFi SSID/PWD 在 esp8266.c 第17行修改
-
-================================================================================
-
-八、main.c 运行模式
-
-8.1 编译开关
-    #define UWB_CSV_OUTPUT    → 采集模式 (串口输出 CIR I/Q CSV)
-    //#define UWB_CSV_OUTPUT  → 检测模式 (ML推理 + DETECT打印)
-
-8.2 运行模式 (KEY2 长按 500ms 切换)
-    MODE_RADAR   (默认): Bistatic 雷达 + ML 检测
-    MODE_RANGING:       DS-TWR 测距 (UWB2 + STM32)
-
-8.3 主循环 (50ms 周期)
-    1. wifi_sm_tick() — WiFi 状态机
-    2. OneNET 上报 (5s) + 云指令轮询
-    3. key1_poll() / key2_poll()
-    4. mode_ranging() 或 mode_radar()
-    5. health_check() — 30s UWB2 ID
-
-8.4 ML 推理模式下的串口输出
-    [DETECT] EMPTY  p=0.0x   (每 4s 一行)
-    [DETECT] HUMAN  p=0.8x
-    状态变化时 CAN 0x102 上报
-
-================================================================================
-
-九、GD32F3 中控
-
-9.1 功能
-    CAN0 (PB8/PB9) 接收 0x103 错误帧
-    OLED 显示最后错误码 + 蜂鸣器状态
-    错误时蜂鸣器响, 10s 超时自动关
-    KEY1 (PA1) 切换蜂鸣器
-
-9.2 工程
-    GD32F103中控\Project\GD32F3.uvprojx
-
-================================================================================
-
-十、常见问题和调试
-
-10.1 模型输出 p=0.00
-    → model_weights.h 数组值是否完整 (W/mu/sigma 都是 22 个, 不能缺)
-    → 天线位置是否和训练时一致 (不一致→特征漂移→必须重新训练)
-    → ml_sigma[i] 是否为零 (除以零→NaN→p=0)
-
-10.2 UWB ID 读不到 (0x00000000)
-    → SPI 速率太快 (长线→降 bb_nop=200)
-    → SPI 线松动/接触不良
-    → 模块供电不足
-
-10.3 CAN BUS-OFF
-    → 波特率匹配 (双方 500kbps)
-    → 终端电阻 (120Ω)
-    → 收发器供电
-
-10.4 ESP8266 阻塞
-    → 已经改为非阻塞状态机, 不影响雷达
-    → WiFi 失败→3次重试→DEAD→60s再试
-
-================================================================================
-
-十一、Git 操作
-
-    当前分支: master
-    最新 commit: c93048c — "关闭ML调试输出: 模型验证通过"
-    GitHub: git@github.com:sorosaulong-ux/gd32-test-project.git
-
-    其他分支:
-      ranging — 历史开发分支 (测距+雷达+WiFi 完整过程)
-
-================================================================================
-
-十二、部署步骤速查
-
-    1. 固定 UWB 天线位置 (不要动)
-    2. main.c 打开 #define UWB_CSV_OUTPUT
-    3. Keil 编译烧录 GD32A7
-    4. python uwb_recorder.py COM4 -l empty -t 300  (空车5min)
-    5. python uwb_recorder.py COM4 -l human -t 120  (有人2min)
-    6. python train_model.py cir_empty_*.csv cir_human_*.csv
-    7. main.c 注释 #define UWB_CSV_OUTPUT
-    8. Keil 编译烧录
-    9. 串口观察 [DETECT] 输出
-
-================================================================================
-
-十三、Python 环境
-
-    Conda 环境: C:\Users\zzs\.conda\envs\uwb\python.exe
-    已安装: numpy, scipy, matplotlib, scikit-learn, pyserial
-    脚本路径: C:\GD32\Project\test\py\
-
-================================================================================
+=== GD32A7 UWB 雷达 + CAN 诊断 项目上下文 ===
+Git: master @ c93048c | github.com/sorosaulong-ux/gd32-test-project
+工程: C:\GD32\Project\test\test.uvprojx
+
+=== 硬件 ===
+GD32A7(Cortex-M7 160MHz) | GD32F3(中控) | STM32F103(钥匙)
+UWB1(TX): PL2/PL0/PI8 | UWB2(RX): PB11/PI11/PI10 | SPI: PE5/PE6/PH14
+CAN2: PM2/PM3 500kbps | ESP8266: PJ7/PJ8 115200 | Buzzer: PB13 active-low
+KEY1: PC13(蜂鸣器) KEY2: GPIOL.3(模式切换) KEY3: PL4(刹车) KEY4: PL5(手刹)
+
+=== 核心文件 ===
+User/main.c                    # 主循环: system_init→network_init→main_loop
+Hardware/uwb.c                 # 双模块雷达(4Hz,128bin CIR)+DS-TWR测距
+Hardware/uwb_port.c            # 软SPI(bb_nop=2fast/12slow)
+Hardware/ml_predict.c          # 边缘ML推理(16帧窗→22维→sigmoid)
+Hardware/can_diag.c            # CAN 0x101/0x102/0x103
+Hardware/esp8266.c             # WiFi状态机(非阻塞,失败→60s重试)
+Hardware/key.c                 # 4个按键
+py/train_model.py              # sklearn LR训练→导出model_weights.h
+py/model_weights.h             # 模型权重(W/b/mu/sigma各22个float)
+
+=== UWB雷达参数 ===
+CH5(6489.6MHz) PRF64M PLEN128 PAC8 6.8Mbps IEEE4zSFD STS_OFF
+4Hz(250ms间隔) 128bin CIR I/Q(24bit→int32)
+TX power: {0x34,0xfdfdfdfd,0x0}  AntDelay: 16385
+
+=== ML模型 ===
+流水线: 每帧18维瞬时→环形缓冲16帧→22维窗口统计→标准化→LR→sigmoid
+18维瞬时: fp_power/noise/mag_mean/mag_std + 7bin幅值+7bin相位
+  7个关键bin: {2,8,25,31,63,69,103}
+22维窗口: 4全局均值+4全局std+7bin幅值std+7bin相位环方差
+公式: z=W·x+b  p=1/(1+e^-z)  判(p>0.5)
+训练: StandardScaler+LogisticRegression(C=1.0)
+性能: 96.4%acc 100%recall  EMTPY:p=0~0.15  HUMAN:p=0.62~0.97
+SRAM: ~700B  推理: <1us  更新: 4s
+★训练和推理天线位置必须一致!
+
+=== CAN协议 ===
+0x101: 测距 [dist_mm_BE32]
+0x102: 雷达 [detected, confidence, 0, 0]
+0x103: 错误 [err, sub, 0, sig] sig=0xAA故障/0x55正常
+  01.01=UWB ID异常 02.01=WiFi断连 03.01=BUS-OFF 04.01=启动 05.01=MQTT断连
+  00.00=全清  去重:同err+sub只发一次
+
+=== main.c运行 ===
+编译开关: #define UWB_CSV_OUTPUT→采集模式 //→检测模式
+默认RADAR(ML检测)  KEY2长按→RANGING(DS-TWR测距)
+main_loop每50ms: wifi_sm_tick→OneNET(仅WiFiOK)→key_poll→mode→health_check
+
+=== 部署步骤 ===
+1. 固定天线位置不动
+2. 开CSV→编译烧录→python uwb_recorder.py COM4 -l empty -t 300
+3. python uwb_recorder.py COM4 -l human -t 120
+4. python train_model.py cir_empty*.csv cir_human*.csv → model_weights.h
+5. 关CSV→编译烧录→串口观察[DETECT]
+
+=== Python ===
+conda env: C:\Users\zzs\.conda\envs\uwb\python.exe
+scripts: C:\GD32\Project\test\py\
+已装: numpy scipy matplotlib scikit-learn pyserial

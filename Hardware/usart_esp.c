@@ -54,7 +54,8 @@ void usart3_esp_init(uint32_t baudrate)
 
     /* Enable RX interrupt (DRIE = data reception interrupt) */
     LINFLEXD_UART_LINIER(EVAL_COMB) |= LINFLEXD_UART_LINIER_DRIE;
-    nvic_irq_enable(LINFlexD3_IRQn, 1, 0);
+    /* 优先级必须 >= configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (2) */
+    nvic_irq_enable(LINFlexD3_IRQn, 5, 0);
 
     printf("[ESP] UART3 init OK @ %lu baud\r\n", (unsigned long)baudrate);
 }
@@ -62,11 +63,10 @@ void usart3_esp_init(uint32_t baudrate)
 /* ─── Send raw bytes (blocking, per-byte) ─── */
 void Usart_SendString(uint32_t periph, unsigned char *str, unsigned short len)
 {
-    (void)periph;  /* always UART3 for ESP8266 */
+    (void)periph;
     for (unsigned short i = 0; i < len; i++) {
         linflexd_uart_byte_transmit(EVAL_COMB, str[i]);
-        while (RESET == linflexd_uart_flag_get(EVAL_COMB,
-            LINFLEXD_UART_FLAG_DTF_TFF));
+        while (RESET == linflexd_uart_flag_get(EVAL_COMB, LINFLEXD_UART_FLAG_DTF_TFF));
         linflexd_uart_flag_clear(EVAL_COMB, LINFLEXD_UART_FLAG_DTF_TFF);
     }
 }

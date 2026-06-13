@@ -51,7 +51,9 @@ void systick_config(void)
         while(1) {
         }
     }
-    /* configure the systick handler priority */
+    /* NOTE: FreeRTOS vTaskStartScheduler() reconfigures SysTick priority internally.
+     * This 0x00 is overwritten by xPortStartScheduler(). DO NOT re-call this
+     * function while FreeRTOS is running. */
     NVIC_SetPriority(SysTick_IRQn, 0x00U);
 }
 

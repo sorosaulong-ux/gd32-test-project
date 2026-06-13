@@ -107,7 +107,7 @@ int uwb_radar_init(void)
 int uwb_radar_scan(uwb_radar_result_t *res, uint32_t seq, const char *label)
 {
     uint32_t status, t0;
-    uint8_t  acc_buf[UWB_RADAR_CIR_BINS * 6 + 1];  /* +1 dummy byte */
+    static uint8_t  acc_buf[UWB_RADAR_CIR_BINS * 6 + 1];  /* static — 769B, 避免栈溢出 */
     dwt_rxdiag_t diag;
 
     memset(res, 0, sizeof(*res));
