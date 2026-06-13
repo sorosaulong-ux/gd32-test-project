@@ -232,37 +232,36 @@ void wifi_sm_tick(void)
             sm_retry = 0;
         }
 
-        /* ── 发送下一步命令 ── */
+        /* ── 成功后, 根据当前状态跳转 ── */
         {
-            wifi_sm_state_t prev = sm_state;
-
-            /* 清除旧数据，确保新命令干净 */
+            wifi_sm_state_t cur = sm_state;
             ESP8266_Clear();
 
-            switch (prev) {
-            case WIFI_SM_CWMODE:
-                printf("[WiFi] Step: CWMODE\r\n");
+            switch (cur) {
+            case WIFI_SM_AT:
+                printf("[WiFi] Step: AT OK → CWMODE\r\n");
                 esp8266_cmd_send("AT+CWMODE=1\r\n", "OK");
                 sm_next(WIFI_SM_CWDHCP);
                 break;
-            case WIFI_SM_CWDHCP:
-                printf("[WiFi] Step: CWDHCP\r\n");
+            case WIFI_SM_CWMODE:
+                printf("[WiFi] Step: CWMODE OK → CWDHCP\r\n");
                 esp8266_cmd_send("AT+CWDHCP=1,1\r\n", "OK");
                 sm_next(WIFI_SM_CWJAP);
                 break;
-            case WIFI_SM_CWJAP:
-                printf("[WiFi] Step: CWJAP (WiFi connect)\r\n");
+            case WIFI_SM_CWDHCP:
+                printf("[WiFi] Step: CWDHCP OK → CWJAP\r\n");
                 esp8266_cmd_send(ESP8266_WIFI_INFO, "GOT IP");
                 sm_next(WIFI_SM_TCP);
                 break;
-            case WIFI_SM_TCP:
-                printf("[WiFi] Step: TCP connect OneNET\r\n");
+            case WIFI_SM_CWJAP:
+                printf("[WiFi] Step: CWJAP OK → TCP\r\n");
                 esp8266_cmd_send(ESP8266_ONENET_TCP, "CONNECT");
                 sm_next(WIFI_SM_MQTT_CONNECT);
                 break;
-            case WIFI_SM_MQTT_CONNECT:
-                printf("[WiFi] Step: MQTT connect\r\n");
+            case WIFI_SM_TCP:
+                printf("[WiFi] Step: TCP OK → MQTT\r\n");
                 if (OneNet_DevLink() == 0) {
+                    printf("[MQTT] Login OK!\r\n");
                     sm_next(WIFI_SM_MQTT_SUBSCRIBE);
                 } else {
                     sm_retry++;
@@ -276,7 +275,7 @@ void wifi_sm_tick(void)
                     }
                 }
                 break;
-            case WIFI_SM_MQTT_SUBSCRIBE:
+            case WIFI_SM_MQTT_CONNECT:
                 printf("[WiFi] Step: MQTT subscribe\r\n");
                 OneNET_Subscribe();
                 sm_next(WIFI_SM_OK);
