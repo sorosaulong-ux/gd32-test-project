@@ -22,7 +22,7 @@
 #include "uwb.h"
 #include "uwb_port.h"
 #include "ml_predict.h"
-#include "ble.h"
+//#include "ble.h"  /* 暂未加入 Keil 工程 */
 
 #include <stdio.h>
 
@@ -90,7 +90,7 @@ static void system_init(void)
     key2_init();
     key3_init();  /* 刹车按键 PL4 */
     key4_init();  /* 手刹按键 PL5 */
-    ble_init();   /* BLE蓝牙 PJ0/PJ1/PJ2 */
+    /* ble_init(); — BLE 暂未加入 master 工程 */
 
     printf("\r\n=== GD32A7 Vehicle Terminal ===\r\n\r\n");
 }
@@ -310,7 +310,7 @@ static void main_loop(void)
         key4_poll();
 
         /* ── BLE 连接状态 ── */
-        g_ble_connected = ble_is_connected();
+        g_ble_connected = 1;  /* ble_is_connected() 暂未加入 */
 
         /* ── 蜂鸣器状态变化 → CAN 同步到 GD32F3 ── */
         if (BUZZER_Status != last_buzzer) {
