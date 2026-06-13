@@ -31,10 +31,10 @@ void key_exti_init(void)
     exti_interrupt_flag_clear(EXTI_13);
     nvic_irq_enable(EXTI10_15_IRQn, 2, 0);
 
-    /* ── KEY2: GPIOL.3, PULLUP, BOTH (长按检测) ── */
+    /* ── KEY2: GPIOL.3, PULLUP, FALLING ── */
     gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_3);
     syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN3);
-    exti_init(EXTI_3, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+    exti_init(EXTI_3, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
     exti_interrupt_flag_clear(EXTI_3);
     nvic_irq_enable(EXTI3_IRQn, 2, 0);
 

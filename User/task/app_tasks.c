@@ -282,19 +282,15 @@ void vTaskKey(void *pvParameters)
                 k1_last = k1;
             }
 
-            /* KEY2 (GPIOL.3) — 长按 ≥500ms 切换模式 */
+            /* KEY2 (GPIOL.3) — 按1次切换模式 */
             {
-                static uint32_t key2_ms;
-                if (k2 == 0) {
-                    if (key2_ms == 0) key2_ms = xTaskGetTickCount();  /* 按下计时 */
-                } else if (key2_ms != 0) {
-                    if ((TickType_t)(xTaskGetTickCount() - key2_ms) >= pdMS_TO_TICKS(500)) {
-                        g_mode = (g_mode == MODE_RADAR) ? MODE_RANGING : MODE_RADAR;
-                        printf("\r\n=== SWITCH: %s ===\r\n",
-                               (g_mode == MODE_RADAR) ? "RADAR" : "RANGING");
-                    }
-                    key2_ms = 0;
+                static uint8_t k2_last = 1;
+                if (k2_last == 1 && k2 == 0) {  /* HIGH→LOW = 刚按下 */
+                    g_mode = (g_mode == MODE_RADAR) ? MODE_RANGING : MODE_RADAR;
+                    printf("\r\n=== SWITCH: %s ===\r\n",
+                           (g_mode == MODE_RADAR) ? "RADAR" : "RANGING");
                 }
+                k2_last = k2;
             }
 
             /* KEY3 (GPIOL.4) / KEY4 (GPIOL.5) — 读当前电平, 低=按下 */
