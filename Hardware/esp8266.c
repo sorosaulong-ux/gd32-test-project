@@ -267,12 +267,15 @@ void wifi_sm_tick(void)
             if (rc == 0) return;
 
             if (rc == -1) {
-                printf("[WiFi] CIPSTART failed, retry\r\n");
+                printf("[WiFi] CIPSTART failed, retry in 3s\r\n");
                 if (++sm_retry > SM_RETRY_MAX) {
                     sm_next(WIFI_SM_DEAD);
                     can_diag_send_error(CAN_ERR_ESP8266, CAN_ERR_ESP_WIFI);
+                    return;
                 }
-                return;  /* 下一 tick 重新发 */
+                /* ★ 回 Phase 1: 重置冷却计时, 3s 后再发 */
+                sm_step_ms = now;
+                return;
             }
         }
 
@@ -283,9 +286,10 @@ void wifi_sm_tick(void)
         if (OneNet_DevLink() == 0) {
             sm_next(WIFI_SM_MQTT_SUBSCRIBE);
         } else {
+            printf("[WiFi] MQTT login failed, retry in 3s\r\n");
             if (++sm_retry > SM_RETRY_MAX)
                 sm_next(WIFI_SM_DEAD);
-            /* retry: 回到 Phase 1 冷却 → Phase 2 重发 CIPSTART */
+            sm_step_ms = now;  /* back to Phase 1 cooldown */
         }
         break;
     }
