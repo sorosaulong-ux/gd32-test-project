@@ -266,38 +266,41 @@ void vTaskKey(void *pvParameters)
             vTaskDelay(pdMS_TO_TICKS(50)); /* 消抖 50ms */
             gd_eval_led_toggle(LED2);       /* LED2 翻转 = ISR 确认触发 */
 
-            /* KEY1 (PC13, 上沿释放) — 每按1次蜂鸣器翻转1次 */
-            /* 注: ISR 上升沿=释放瞬间, 此时 GPIO 已回到 HIGH */
+            /* 消抖后重读各按键电平 */
+            uint8_t k1 = gpio_input_bit_get(GPIOC, GPIO_PIN_13);
+            uint8_t k2 = gpio_input_bit_get(GPIOL, GPIO_PIN_3);
+            uint8_t k3 = gpio_input_bit_get(GPIOL, GPIO_PIN_4);
+            uint8_t k4 = gpio_input_bit_get(GPIOL, GPIO_PIN_5);
+
+            /* KEY1 (PC13) — 下降沿=按下, 蜂鸣器切换1次 */
             {
                 static uint8_t k1_last = 1;
-                uint8_t cur = gpio_input_bit_get(GPIOC, GPIO_PIN_13);
-                if (k1_last == 0 && cur == 1) {  /* LOW→HIGH = 刚释放 */
+                if (k1_last == 1 && k1 == 0) {  /* HIGH→LOW = 刚按下 */
                     BUZZER_Set(BUZZER_Status == BUZZER_ON ? BUZZER_OFF : BUZZER_ON);
                     printf("[KEY] Buzzer toggle\r\n");
                 }
-                k1_last = cur;
+                k1_last = k1;
             }
 
-            /* KEY2 (GPIOL.3, BOTH 沿) — 长按 ≥500ms 切换模式 */
+            /* KEY2 (GPIOL.3) — 长按 ≥500ms 切换模式 */
             {
                 static uint32_t key2_ms;
-                if (RESET == gpio_input_bit_get(GPIOL, GPIO_PIN_3)) {
-                    if (key2_ms == 0) key2_ms = xTaskGetTickCount();  /* 按下开始计时 */
+                if (k2 == 0) {
+                    if (key2_ms == 0) key2_ms = xTaskGetTickCount();  /* 按下计时 */
                 } else if (key2_ms != 0) {
                     if ((TickType_t)(xTaskGetTickCount() - key2_ms) >= pdMS_TO_TICKS(500)) {
                         g_mode = (g_mode == MODE_RADAR) ? MODE_RANGING : MODE_RADAR;
                         printf("\r\n=== SWITCH: %s ===\r\n",
                                (g_mode == MODE_RADAR) ? "RADAR" : "RANGING");
                     }
-                    key2_ms = 0;  /* 重置计时 */
+                    key2_ms = 0;
                 }
             }
 
-            /* KEY3 (GPIOL.4) / KEY4 (GPIOL.5) — 切换状态 */
-            g_brake         ^= 1;   /* 按1次开、再按1次关 */
-            g_parking_brake ^= 1;
+            /* KEY3 (GPIOL.4) / KEY4 (GPIOL.5) — 读当前电平, 低=按下 */
+            g_brake         = (k3 == 0);
+            g_parking_brake = (k4 == 0);
 
-            /* 车锁+刹车 → 启动 */
             if (g_car_lock && g_brake) {
                 printf("[LOGIC] START\r\n");
             }

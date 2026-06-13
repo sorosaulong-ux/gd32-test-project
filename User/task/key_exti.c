@@ -17,22 +17,40 @@
 
 void key_exti_init(void)
 {
-    /* KEY1/3/4 用官方初始化 (已验证可用的 API) */
-    gd_eval_key_init(KEY_1, KEY_MODE_EXTI);
-    gd_eval_key_init(KEY_3, KEY_MODE_EXTI);
-    gd_eval_key_init(KEY_4, KEY_MODE_EXTI);
+    /* ★ 全部使用手动配置 (GPIO+EXTI) — 确保与当前引脚映射一致 */
 
-    /* KEY2 手动配置 — 长按检测需要 BOTH 沿 */
-    {
-        rcu_periph_clock_enable(KEY_2_GPIO_CLK);
-        rcu_periph_clock_enable(RCU_SYSCFG);
-        prpu_periph_unlock(PRPU_GPIOL);
-        gpio_mode_set(KEY_2_GPIO_PORT, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, KEY_2_PIN);
-        syscfg_exti_line_config(KEY_2_EXTI_PORT_SOURCE, KEY_2_EXTI_PIN_SOURCE);
-        exti_init(KEY_2_EXTI_LINE, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
-        exti_interrupt_flag_clear(KEY_2_EXTI_LINE);
-        nvic_irq_enable(KEY_2_EXTI_IRQn, 2, 0);
-    }
+    rcu_periph_clock_enable(RCU_GPIOC);
+    rcu_periph_clock_enable(RCU_GPIOL);
+    rcu_periph_clock_enable(RCU_SYSCFG);
+    prpu_periph_unlock(PRPU_GPIOL);
+
+    /* ── KEY1: PC13, PULLUP, BOTH ── */
+    gpio_mode_set(GPIOC, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_13);
+    syscfg_exti_line_config(EXTI_SOURCE_GPIOC, EXTI_SOURCE_PIN13);
+    exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+    exti_interrupt_flag_clear(EXTI_13);
+    nvic_irq_enable(EXTI10_15_IRQn, 2, 0);
+
+    /* ── KEY2: GPIOL.3, PULLUP, BOTH (长按检测) ── */
+    gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_3);
+    syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN3);
+    exti_init(EXTI_3, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+    exti_interrupt_flag_clear(EXTI_3);
+    nvic_irq_enable(EXTI3_IRQn, 2, 0);
+
+    /* ── KEY3: GPIOL.4, PULLUP, BOTH ── */
+    gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_4);
+    syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN4);
+    exti_init(EXTI_4, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+    exti_interrupt_flag_clear(EXTI_4);
+    nvic_irq_enable(EXTI4_IRQn, 2, 0);
+
+    /* ── KEY4: GPIOL.5, PULLUP, BOTH ── */
+    gpio_mode_set(GPIOL, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_5);
+    syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN5);
+    exti_init(EXTI_5, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+    exti_interrupt_flag_clear(EXTI_5);
+    nvic_irq_enable(EXTI5_9_IRQn, 2, 0);
 
     printf("[KEY] EXTI init OK (KEY1-4)\r\n");
 }
