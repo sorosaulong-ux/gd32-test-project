@@ -265,39 +265,41 @@ void vTaskKey(void *pvParameters)
     {
         if (xSemaphoreTake(xKey_Semaphore, portMAX_DELAY) == pdTRUE)
         {
-            vTaskDelay(pdMS_TO_TICKS(50)); /* 消抖 50ms */
-            gd_eval_led_toggle(LED2);       /* LED2 翻转 = ISR 确认触发 */
-
-            /* 消抖后重读各按键电平 */
+            /* ★ 立即读 GPIO — 延迟读会错过电平 */
             uint8_t k1 = gpio_input_bit_get(GPIOC, GPIO_PIN_13);
             uint8_t k2 = gpio_input_bit_get(GPIOL, GPIO_PIN_3);
             uint8_t k3 = gpio_input_bit_get(GPIOL, GPIO_PIN_4);
             uint8_t k4 = gpio_input_bit_get(GPIOL, GPIO_PIN_5);
 
-            /* KEY1 (PC13) — 下降沿=按下, 蜂鸣器切换1次 */
+            /* 时间戳去抖 — 同键 200ms 内只响应 1 次 */
+            TickType_t now = xTaskGetTickCount();
+
+            /* KEY1 (PC13) — 按下 LOW = 蜂鸣器翻转 */
             {
-                static uint8_t k1_last = 1;
-                if (k1_last == 1 && k1 == 0) {  /* HIGH→LOW = 刚按下 */
+                static TickType_t last_tm;
+                if (k1 == 0 && (TickType_t)(now - last_tm) > pdMS_TO_TICKS(200)) {
+                    last_tm = now;
                     BUZZER_Set(BUZZER_Status == BUZZER_ON ? BUZZER_OFF : BUZZER_ON);
                     printf("[KEY] Buzzer toggle\r\n");
                 }
-                k1_last = k1;
             }
 
-            /* KEY2 (GPIOL.3) — 按1次切换模式 */
+            /* KEY2 (GPIOL.3) — 按下 LOW = 模式切换 */
             {
-                static uint8_t k2_last = 1;
-                if (k2_last == 1 && k2 == 0) {  /* HIGH→LOW = 刚按下 */
+                static TickType_t last_tm;
+                if (k2 == 0 && (TickType_t)(now - last_tm) > pdMS_TO_TICKS(200)) {
+                    last_tm = now;
                     g_mode = (g_mode == MODE_RADAR) ? MODE_RANGING : MODE_RADAR;
                     printf("\r\n=== SWITCH: %s ===\r\n",
                            (g_mode == MODE_RADAR) ? "RADAR" : "RANGING");
                 }
-                k2_last = k2;
             }
 
-            /* KEY3 (GPIOL.4) / KEY4 (GPIOL.5) — 读当前电平, 低=按下 */
+            /* KEY3/4 — 按下 LOW = 刹车/手刹 */
             g_brake         = (k3 == 0);
             g_parking_brake = (k4 == 0);
+
+            gd_eval_led_toggle(LED2);       /* LED2 翻转 = 按键已处理 */
 
             if (g_car_lock && g_brake) {
                 printf("[LOGIC] START\r\n");
