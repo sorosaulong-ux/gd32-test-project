@@ -10,6 +10,7 @@
 #include "uwb_port.h"
 #include "onenet.h"
 #include "can_diag.h"
+#include "app_tasks.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -232,9 +233,14 @@ void wifi_sm_tick(void)
         }
         break;
 
-    /* ── WIFI_SM_TCP: master-verified blocking TCP+MQTT ── */
+    /* ── WIFI_SM_TCP: 提权→阻塞 TCP+MQTT(防UWB抢占)→降权 ── */
     case WIFI_SM_TCP:
     {
+        extern TaskHandle_t xTaskUWB_Handle;
+
+        /* 临时提权: 确保 TCP+MQTT 阻塞期间不被 UWB 抢占 */
+        if (xTaskUWB_Handle) vTaskPrioritySet(xTaskUWB_Handle, tskIDLE_PRIORITY + 1);
+
         printf("[WiFi] TCP connecting...\r\n");
         while (ESP8266_SendCmd(ESP8266_ONENET_TCP, "CONNECT"))
             delay_ms(500);
@@ -246,6 +252,10 @@ void wifi_sm_tick(void)
         }
 
         OneNET_Subscribe();
+
+        /* 恢复 UWB 优先级 */
+        if (xTaskUWB_Handle) vTaskPrioritySet(xTaskUWB_Handle, TASK_PRIO_UWB);
+
         sm_next(WIFI_SM_OK);
         printf("[WiFi] ONLINE\r\n");
         can_diag_send_error(0, 0);
