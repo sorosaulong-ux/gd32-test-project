@@ -28,9 +28,9 @@ void key_exti_init(void)
     exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
     exti_interrupt_flag_clear(EXTI_13);
 
-    /* ── KEY2: GPIOL.3 → EXTI3 ── */
+    /* ── KEY2: GPIOL.3 → EXTI3 (BOTH edges — 长按检测需要按下+释放) ── */
     syscfg_exti_line_config(EXTI_SOURCE_GPIOL, EXTI_SOURCE_PIN3);
-    exti_init(EXTI_3, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
+    exti_init(EXTI_3, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
     exti_interrupt_flag_clear(EXTI_3);
 
     /* ── KEY3: GPIOL.4 → EXTI4 ── */

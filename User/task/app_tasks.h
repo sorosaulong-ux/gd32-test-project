@@ -40,7 +40,6 @@ extern TaskHandle_t xTaskKey_Handle;
 
 /* ── 队列/信号量 ── */
 extern QueueHandle_t xCanTxQueue;
-extern SemaphoreHandle_t xUWB_Semaphore;
 extern SemaphoreHandle_t xKey_Semaphore;
 
 /* ── API ── */

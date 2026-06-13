@@ -33,7 +33,6 @@ TaskHandle_t xTaskKey_Handle  = NULL;
 
 /* ── 队列/信号量 ── */
 QueueHandle_t xCanTxQueue = NULL;
-SemaphoreHandle_t xUWB_Semaphore = NULL;
 SemaphoreHandle_t xKey_Semaphore = NULL;
 
 /* ── 外部全局变量 ── */
@@ -131,7 +130,7 @@ void vTaskUWB(void *pvParameters)
 
         if (g_mode == MODE_RADAR) {
             /* ==================== 雷达模式 ==================== */
-            uwb_radar_result_t res;
+            static uwb_radar_result_t res;  /* static — ~1KB, 避免栈溢出 */
 
             if (!rad_inited) {
                 if (uwb_radar_init() != UWB_OK) {
@@ -309,7 +308,6 @@ void app_tasks_init(void)
     xCanTxQueue = xQueueCreate(CAN_TX_QUEUE_LEN, sizeof(can_tx_msg_t));
 
     /* 信号量 */
-    xUWB_Semaphore = xSemaphoreCreateBinary();
     xKey_Semaphore = xSemaphoreCreateBinary();
 
     /* ── 按键 EXTI 初始化 ── */
