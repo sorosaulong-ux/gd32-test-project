@@ -265,7 +265,10 @@ void vTaskKey(void *pvParameters)
     {
         if (xSemaphoreTake(xKey_Semaphore, portMAX_DELAY) == pdTRUE)
         {
-            /* ★ 立即读 GPIO — 延迟读会错过电平 */
+            /* ★ 确认任务执行 */
+            printf("[KEY] wake K1=%d K2=%d\r\n",
+                   gpio_input_bit_get(GPIOC, GPIO_PIN_13),
+                   gpio_input_bit_get(GPIOL, GPIO_PIN_3));
             uint8_t k1 = gpio_input_bit_get(GPIOC, GPIO_PIN_13);
             uint8_t k2 = gpio_input_bit_get(GPIOL, GPIO_PIN_3);
             uint8_t k3 = gpio_input_bit_get(GPIOL, GPIO_PIN_4);
